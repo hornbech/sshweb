@@ -101,9 +101,15 @@ function addTab(tabId, label) {
   const tab = document.createElement('div')
   tab.className = 'tab'
   tab.dataset.id = tabId
-  tab.innerHTML = `<span>${label}</span><button title="Close">✕</button>`
-  tab.querySelector('span').addEventListener('click', () => switchTab(tabId))
-  tab.querySelector('button').addEventListener('click', (e) => { e.stopPropagation(); closeTab(tabId) })
+  const span = document.createElement('span')
+  span.textContent = label
+  const closeBtn = document.createElement('button')
+  closeBtn.title = 'Close'
+  closeBtn.textContent = '✕'
+  tab.appendChild(span)
+  tab.appendChild(closeBtn)
+  span.addEventListener('click', () => switchTab(tabId))
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closeTab(tabId) })
   tabBar.appendChild(tab)
 }
 

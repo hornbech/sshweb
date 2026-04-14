@@ -39,6 +39,10 @@ function getStore() {
   return store
 }
 
+function closeStore() {
+  if (store) { store.close(); store = null }
+}
+
 function requireStore(res) {
   const s = getStore()
   if (!s) { res.status(423).json({ error: 'Server locked' }); return null }
@@ -92,7 +96,7 @@ app.post('/api/unlock', async (req, res) => {
   }
   try {
     await masterKey.unlock(password)
-    store = null // reset store so it picks up new key
+    closeStore() // reset store so it picks up new key
     logger.info('Server unlocked')
     res.json({ ok: true })
   } catch {
@@ -102,7 +106,7 @@ app.post('/api/unlock', async (req, res) => {
 
 app.post('/api/lock', (req, res) => {
   masterKey.lock()
-  store = null
+  closeStore()
   logger.info('Server locked')
   res.json({ ok: true })
 })
@@ -118,7 +122,13 @@ app.post('/api/connections', (req, res) => {
   const s = requireStore(res)
   if (!s) return
   const { label, host, port, username, authType, secret } = req.body
-  const id = s.create({ label, host, port, username, authType, secret })
+  if (!label || !host || !username || !secret) {
+    return res.status(400).json({ error: 'label, host, username, and secret are required' })
+  }
+  if (!['password', 'key'].includes(authType)) {
+    return res.status(400).json({ error: 'authType must be "password" or "key"' })
+  }
+  const id = s.create({ label, host, port: Number(port) || 22, username, authType, secret })
   res.status(201).json({ id })
 })
 
@@ -212,6 +222,7 @@ wss.on('connection', (ws) => {
 // Graceful shutdown
 function shutdown() {
   logger.info('Shutting down...')
+  closeStore()
   sshManager.killAll('Server shutting down...')
   const timeout = setTimeout(() => process.exit(0), 10_000)
   timeout.unref()
