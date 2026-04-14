@@ -149,7 +149,7 @@ app.delete('/api/sessions/:id', (req, res) => {
 // Serve built frontend (production)
 if (existsSync(DIST)) {
   app.use(express.static(DIST))
-  app.get('*', (req, res) => {
+  app.get('/{*splat}', (req, res) => {
     res.sendFile(join(DIST, 'index.html'))
   })
 }
