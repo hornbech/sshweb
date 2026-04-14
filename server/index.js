@@ -39,8 +39,15 @@ function getStore() {
   return store
 }
 
+function requireStore(res) {
+  const s = getStore()
+  if (!s) { res.status(423).json({ error: 'Server locked' }); return null }
+  return s
+}
+
 export const app = express()
 app.use(express.json())
+app.use(express.urlencoded({ extended: false }))
 
 // Lock guard middleware — redirect to /unlock unless the path is allowed
 const UNLOCKED_PATHS = ['/unlock', '/api/unlock', '/health']
@@ -48,6 +55,7 @@ app.use((req, res, next) => {
   if (masterKey.isUnlocked()) return next()
   if (UNLOCKED_PATHS.some(p => req.path.startsWith(p))) return next()
   if (req.path.startsWith('/assets') || req.path.startsWith('/favicon')) return next()
+  if (req.path.startsWith('/api/')) return res.status(423).json({ error: 'Server locked' })
   return res.redirect('/unlock')
 })
 
@@ -101,22 +109,30 @@ app.post('/api/lock', (req, res) => {
 
 // Connection CRUD
 app.get('/api/connections', (req, res) => {
-  res.json(getStore().list())
+  const s = requireStore(res)
+  if (!s) return
+  res.json(s.list())
 })
 
 app.post('/api/connections', (req, res) => {
+  const s = requireStore(res)
+  if (!s) return
   const { label, host, port, username, authType, secret } = req.body
-  const id = getStore().create({ label, host, port, username, authType, secret })
+  const id = s.create({ label, host, port, username, authType, secret })
   res.status(201).json({ id })
 })
 
 app.put('/api/connections/:id', (req, res) => {
-  getStore().update(req.params.id, req.body)
+  const s = requireStore(res)
+  if (!s) return
+  s.update(req.params.id, req.body)
   res.json({ ok: true })
 })
 
 app.delete('/api/connections/:id', (req, res) => {
-  getStore().delete(req.params.id)
+  const s = requireStore(res)
+  if (!s) return
+  s.delete(req.params.id)
   res.json({ ok: true })
 })
 
@@ -156,28 +172,35 @@ wss.on('connection', (ws) => {
   const log = logger.child({ wsConn: true })
 
   ws.on('message', async (raw) => {
-    let msg
-    try { msg = JSON.parse(raw) } catch { return }
+    try {
+      let msg
+      try { msg = JSON.parse(raw) } catch { return }
 
-    if (msg.type === 'connect') {
-      const { connectionId, cols, rows } = msg
-      const conn = getStore().get(connectionId)
-      if (!conn) { ws.close(4003, 'Connection not found'); return }
+      if (msg.type === 'connect') {
+        const { connectionId, cols, rows } = msg
+        const s = getStore()
+        if (!s) { ws.close(4001, 'Server locked'); return }
+        const conn = s.get(connectionId)
+        if (!conn) { ws.close(4003, 'Connection not found'); return }
 
-      try {
-        sessionId = await sshManager.open({
-          ...conn, ws, cols: cols ?? 80, rows: rows ?? 24,
-        })
-        ws.send(JSON.stringify({ type: 'connected', sessionId }))
-      } catch (err) {
-        log.warn({ err }, 'SSH open failed')
-        ws.send(JSON.stringify({ type: 'error', message: err.message }))
-        ws.close()
+        try {
+          sessionId = await sshManager.open({
+            ...conn, ws, cols: cols ?? 80, rows: rows ?? 24,
+          })
+          ws.send(JSON.stringify({ type: 'connected', sessionId }))
+        } catch (err) {
+          log.warn({ err }, 'SSH open failed')
+          try { ws.send(JSON.stringify({ type: 'error', message: err.message })) } catch {}
+          ws.close()
+        }
+      } else if (msg.type === 'data' && sessionId) {
+        sshManager.write(sessionId, Buffer.from(msg.data, 'base64').toString())
+      } else if (msg.type === 'resize' && sessionId) {
+        sshManager.resize(sessionId, msg.cols, msg.rows)
       }
-    } else if (msg.type === 'data' && sessionId) {
-      sshManager.write(sessionId, Buffer.from(msg.data, 'base64').toString())
-    } else if (msg.type === 'resize' && sessionId) {
-      sshManager.resize(sessionId, msg.cols, msg.rows)
+    } catch (err) {
+      log.error({ err }, 'Unhandled error in WebSocket message handler')
+      try { ws.close(4000, 'Internal error') } catch {}
     }
   })
 
@@ -191,6 +214,7 @@ function shutdown() {
   logger.info('Shutting down...')
   sshManager.killAll('Server shutting down...')
   const timeout = setTimeout(() => process.exit(0), 10_000)
+  timeout.unref()
   server.close(() => {
     clearTimeout(timeout)
     process.exit(0)
