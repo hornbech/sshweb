@@ -3,7 +3,7 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 COPY client/ client/
 COPY vite.config.js ./
@@ -16,7 +16,7 @@ WORKDIR /app
 RUN addgroup -S sshweb && adduser -S sshweb -G sshweb
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --omit=optional
 
 COPY server/ server/
 COPY --from=builder /app/dist dist/
