@@ -76,8 +76,10 @@ app.get('/health', (req, res) => {
 // Unlock page
 app.get('/unlock', (req, res) => {
   if (masterKey.isUnlocked()) return res.redirect('/')
-  const unlockHtml = join(__dirname, '../client/unlock.html')
-  if (existsSync(unlockHtml)) {
+  const distUnlock = join(DIST, 'unlock.html')
+  const srcUnlock = join(__dirname, '../client/unlock.html')
+  const unlockHtml = existsSync(distUnlock) ? distUnlock : existsSync(srcUnlock) ? srcUnlock : null
+  if (unlockHtml) {
     res.sendFile(unlockHtml)
   } else {
     // Fallback minimal unlock page if client not built yet
