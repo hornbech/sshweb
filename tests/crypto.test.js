@@ -29,3 +29,18 @@ test('decrypt throws on tampered ciphertext', () => {
 
   assert.throws(() => decrypt(tampered, key))
 })
+
+test('encrypt throws on wrong key length', () => {
+  assert.throws(() => encrypt('data', Buffer.alloc(16)), /32-byte/)
+})
+
+test('decrypt throws on truncated ciphertext', () => {
+  assert.throws(() => decrypt(Buffer.alloc(10).toString('base64'), Buffer.alloc(32, 'a')), /too short/)
+})
+
+test('decrypt throws on wrong key', () => {
+  const key1 = Buffer.alloc(32, 0x01)
+  const key2 = Buffer.alloc(32, 0x02)
+  const ciphertext = encrypt('secret', key1)
+  assert.throws(() => decrypt(ciphertext, key2))
+})

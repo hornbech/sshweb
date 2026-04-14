@@ -12,6 +12,7 @@ const TAG_BYTES = 16
  * @returns {string}
  */
 export function encrypt(plaintext, key) {
+  if (!Buffer.isBuffer(key) || key.length !== 32) throw new RangeError(`key must be a 32-byte Buffer, got ${key?.length ?? typeof key}`)
   const iv = randomBytes(IV_BYTES)
   const cipher = createCipheriv(ALGORITHM, key, iv)
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
@@ -26,7 +27,9 @@ export function encrypt(plaintext, key) {
  * @returns {string}
  */
 export function decrypt(ciphertextB64, key) {
+  if (!Buffer.isBuffer(key) || key.length !== 32) throw new RangeError(`key must be a 32-byte Buffer, got ${key?.length ?? typeof key}`)
   const data = Buffer.from(ciphertextB64, 'base64')
+  if (data.length < IV_BYTES + TAG_BYTES) throw new RangeError(`ciphertext too short: ${data.length} bytes, minimum is ${IV_BYTES + TAG_BYTES}`)
   const iv = data.subarray(0, IV_BYTES)
   const tag = data.subarray(IV_BYTES, IV_BYTES + TAG_BYTES)
   const ciphertext = data.subarray(IV_BYTES + TAG_BYTES)
