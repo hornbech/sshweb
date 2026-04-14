@@ -43,6 +43,9 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-
 .session-item button { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 3px; padding: 1px 6px; cursor: pointer; font-size: .75rem; }
 button.danger { width: 100%; margin-top: .5rem; padding: .5rem; background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; cursor: pointer; }
 button.danger:hover { background: var(--accent); color: #fff; }
+#sidebar-footer { border-top: 1px solid var(--surface2); padding: .5rem 1rem; font-size: .72rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
+#sidebar-footer a { color: var(--text-muted); text-decoration: none; }
+#sidebar-footer a:hover { color: var(--accent); }
 
 /* Main area */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
