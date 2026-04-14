@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sshweb — Unlock</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="unlock-page">
+  <div class="unlock-card">
+    <h1>sshweb</h1>
+    <p>Enter your master password to unlock.</p>
+    <form id="unlock-form">
+      <input id="password" type="password" placeholder="Master password" autofocus required>
+      <button type="submit">Unlock</button>
+      <p id="error-msg" class="error hidden"></p>
+    </form>
+  </div>
+  <script type="module">
+    document.getElementById('unlock-form').addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const password = document.getElementById('password').value
+      const errEl = document.getElementById('error-msg')
+      errEl.classList.add('hidden')
+      const res = await fetch('/api/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (res.ok) {
+        window.location.href = '/'
+      } else {
+        errEl.textContent = 'Invalid password. Try again.'
+        errEl.classList.remove('hidden')
+        document.getElementById('password').value = ''
+        document.getElementById('password').focus()
+      }
+    })
+  </script>
+</body>
+</html>

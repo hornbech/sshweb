@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>sshweb</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <span class="logo">sshweb</span>
+        <button id="new-conn-btn" title="New connection">+</button>
+      </div>
+      <ul id="connection-list"></ul>
+      <div id="admin-panel">
+        <div class="admin-row">
+          <span id="status-dot" class="dot green"></span>
+          <span id="uptime">—</span>
+        </div>
+        <div id="active-sessions-list"></div>
+        <button id="lock-btn" class="danger">Lock Server</button>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="tabs"></div>
+      <div id="terminal-container"></div>
+      <div id="no-connection">
+        <p>Select a connection or add a new one.</p>
+      </div>
+    </main>
+  </div>
+
+  <!-- New/Edit connection modal -->
+  <div id="modal" class="hidden">
+    <div class="modal-card">
+      <h2 id="modal-title">New Connection</h2>
+      <form id="conn-form">
+        <input name="label" placeholder="Label (e.g. My Server)" required>
+        <input name="host" placeholder="Host / IP" required>
+        <input name="port" type="number" value="22" required>
+        <input name="username" placeholder="Username" required>
+        <select name="authType">
+          <option value="password">Password</option>
+          <option value="key">Private Key</option>
+        </select>
+        <input id="secret-field" name="secret" type="password" placeholder="Password or paste private key">
+        <div class="modal-actions">
+          <button type="button" id="cancel-btn">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
