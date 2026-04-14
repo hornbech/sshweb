@@ -9,6 +9,14 @@ export class SshManager {
   #sessions = new Map()
   #logger
 
+  #safeSend(ws, payload) {
+    try {
+      ws.send(payload)
+    } catch {
+      // WebSocket closed between readyState check and send — ignore
+    }
+  }
+
   constructor(logger) {
     this.#logger = logger
   }
@@ -53,21 +61,22 @@ export class SshManager {
 
           stream.on('data', (data) => {
             if (ws.readyState === ws.constructor.OPEN) {
-              ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }))
+              this.#safeSend(ws, JSON.stringify({ type: 'data', data: data.toString('base64') }))
             }
           })
 
           stream.stderr.on('data', (data) => {
             if (ws.readyState === ws.constructor.OPEN) {
-              ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }))
+              this.#safeSend(ws, JSON.stringify({ type: 'data', data: data.toString('base64') }))
             }
           })
 
           stream.on('close', () => {
+            if (!this.#sessions.has(sessionId)) return  // already cleaned up by kill()
             log.info('SSH stream closed')
             this.#sessions.delete(sessionId)
             if (ws.readyState === ws.constructor.OPEN) {
-              ws.send(JSON.stringify({ type: 'close' }))
+              this.#safeSend(ws, JSON.stringify({ type: 'close' }))
               ws.close()
             }
           })
@@ -79,6 +88,7 @@ export class SshManager {
       client.on('error', (err) => {
         log.warn({ err }, 'SSH connection error')
         this.#sessions.delete(sessionId)
+        client.end()  // defensive cleanup
         reject(err)
       })
 
@@ -121,7 +131,7 @@ export class SshManager {
   killAll(message) {
     for (const [sessionId, session] of this.#sessions) {
       if (message && session.ws.readyState === session.ws.constructor.OPEN) {
-        session.ws.send(JSON.stringify({ type: 'data', data: Buffer.from('\r\n' + message + '\r\n').toString('base64') }))
+        this.#safeSend(session.ws, JSON.stringify({ type: 'data', data: Buffer.from('\r\n' + message + '\r\n').toString('base64') }))
       }
       session.stream.end()
       session.client.end()
