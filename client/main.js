@@ -40,7 +40,13 @@ function renderConnectionList() {
   for (const conn of connections) {
     const li = document.createElement('li')
     li.dataset.id = conn.id
-    li.innerHTML = `<span>${conn.label}</span><span class="conn-host">${conn.host}</span>`
+    const labelSpan = document.createElement('span')
+    labelSpan.textContent = conn.label
+    const hostSpan = document.createElement('span')
+    hostSpan.className = 'conn-host'
+    hostSpan.textContent = conn.host
+    li.appendChild(labelSpan)
+    li.appendChild(hostSpan)
     li.addEventListener('click', () => openTerminal(conn))
     connList.appendChild(li)
   }
@@ -174,13 +180,30 @@ async function refreshAdmin() {
     statusDot.className = `dot ${health.status === 'ok' ? 'green' : 'red'}`
 
     const sessions = await api.get('/api/sessions')
-    sessionsEl.innerHTML = sessions.length
-      ? sessions.map(s => `<div class="session-item"><span>${s.label}</span><button onclick="killSession('${s.id}')">Kill</button></div>`).join('')
-      : '<div style="color:var(--text-muted);font-size:.8rem">No active sessions</div>'
+    sessionsEl.innerHTML = ''
+    if (sessions.length === 0) {
+      const empty = document.createElement('div')
+      empty.style.cssText = 'color:var(--text-muted);font-size:.8rem'
+      empty.textContent = 'No active sessions'
+      sessionsEl.appendChild(empty)
+    } else {
+      for (const session of sessions) {
+        const item = document.createElement('div')
+        item.className = 'session-item'
+        const label = document.createElement('span')
+        label.textContent = session.label
+        const killBtn = document.createElement('button')
+        killBtn.textContent = 'Kill'
+        killBtn.addEventListener('click', () => killSession(session.id))
+        item.appendChild(label)
+        item.appendChild(killBtn)
+        sessionsEl.appendChild(item)
+      }
+    }
   } catch {}
 }
 
-window.killSession = async (id) => {
+async function killSession(id) {
   await api.del(`/api/sessions/${id}`)
   refreshAdmin()
 }
