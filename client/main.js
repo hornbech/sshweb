@@ -40,13 +40,30 @@ function renderConnectionList() {
   for (const conn of connections) {
     const li = document.createElement('li')
     li.dataset.id = conn.id
+
+    const info = document.createElement('div')
+    info.className = 'conn-info'
     const labelSpan = document.createElement('span')
     labelSpan.textContent = conn.label
     const hostSpan = document.createElement('span')
     hostSpan.className = 'conn-host'
     hostSpan.textContent = conn.host
-    li.appendChild(labelSpan)
-    li.appendChild(hostSpan)
+    info.appendChild(labelSpan)
+    info.appendChild(hostSpan)
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'conn-delete'
+    deleteBtn.title = 'Delete connection'
+    deleteBtn.textContent = '✕'
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (!confirm(`Delete "${conn.label}"?`)) return
+      await api.del(`/api/connections/${conn.id}`)
+      await loadConnections()
+    })
+
+    li.appendChild(info)
+    li.appendChild(deleteBtn)
     li.addEventListener('click', () => openTerminal(conn))
     connList.appendChild(li)
   }
