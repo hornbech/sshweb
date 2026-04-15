@@ -68,6 +68,14 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false, // would break xterm canvas
+  permissionsPolicy: {
+    features: {
+      clipboard_read: ["'self'"],   // Ctrl+V paste into terminal
+      camera: [],
+      microphone: [],
+      geolocation: [],
+    },
+  },
 }))
 
 // Rate limit unlock attempts (per real IP)

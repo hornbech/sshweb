@@ -104,6 +104,16 @@ function openTerminal(conn) {
 
   ws.onclose = () => term.write('\r\n[Disconnected]\r\n')
 
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type === 'keydown' && e.ctrlKey && e.key === 'v') {
+      navigator.clipboard.readText().then((text) => {
+        ws.send(JSON.stringify({ type: 'data', data: btoa(text) }))
+      }).catch(() => {})
+      return false // prevent xterm from handling it
+    }
+    return true
+  })
+
   term.onData((data) => {
     ws.send(JSON.stringify({ type: 'data', data: btoa(data) }))
   })
