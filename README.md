@@ -107,6 +107,7 @@ All configuration is via environment variables (`.env` file):
 | `DATA_DIR` | `/data` | Directory for encrypted DB and key files |
 | `SESSION_TIMEOUT_MINUTES` | `60` | Idle session expiry; activity slides the window |
 | `MAX_SESSIONS` | `10` | Maximum concurrent SSH sessions |
+| `SSH_KEEPALIVE_INTERVAL` | `15` | Seconds between SSH keepalive packets; prevents idle disconnects from the server or NAT/firewall |
 | `LOG_LEVEL` | `info` | Pino log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` |
 
 ---

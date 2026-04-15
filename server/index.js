@@ -405,6 +405,14 @@ if (existsSync(DIST)) {
 export const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 
+// Ping all WebSocket clients every 30 seconds to keep connections alive through proxies.
+const wsPingInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.constructor.OPEN) ws.ping()
+  }
+}, 30_000)
+wss.on('close', () => clearInterval(wsPingInterval))
+
 wss.on('connection', (ws, req) => {
   if (!masterKey.isUnlocked() || !sessions.validate(getSessionToken(req))) {
     ws.close(4001, 'Unauthorized')

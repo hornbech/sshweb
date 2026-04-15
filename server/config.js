@@ -14,6 +14,7 @@ export const config = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   sessionTimeoutMinutes: parseIntRequired(process.env.SESSION_TIMEOUT_MINUTES ?? '60', 'SESSION_TIMEOUT_MINUTES'),
   maxSessions: parseIntRequired(process.env.MAX_SESSIONS ?? '10', 'MAX_SESSIONS'),
+  sshKeepaliveInterval: parseIntRequired(process.env.SSH_KEEPALIVE_INTERVAL ?? '15', 'SSH_KEEPALIVE_INTERVAL'),
   logLevel: (() => {
     const level = process.env.LOG_LEVEL ?? 'info'
     if (!VALID_LOG_LEVELS.has(level)) throw new Error(`Invalid config: LOG_LEVEL=${level} must be one of ${[...VALID_LOG_LEVELS].join(', ')}`)

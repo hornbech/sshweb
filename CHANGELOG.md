@@ -38,6 +38,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **SSH sessions disconnecting when idle** — the ssh2 client now sends SSH-level keepalive packets every 15 seconds (configurable via `SSH_KEEPALIVE_INTERVAL`), preventing the remote server or NAT/firewall from dropping idle connections. The WebSocket server also pings all clients every 30 seconds so reverse proxies (e.g. Nginx Proxy Manager) do not close idle WebSocket connections.
+
 - **Terminal garbled Unicode / box-drawing characters** — SSH output was decoded with `atob()` producing a Latin-1 binary string; xterm.js misinterpreted multi-byte UTF-8 sequences. Fixed by passing a `Uint8Array` of raw bytes so xterm.js performs correct UTF-8 decoding.
 - **Ctrl+V pasted text twice** — clipboard API handler and xterm's native paste event both fired, sending text twice. Replaced clipboard API approach with a `paste` event listener on `term.textarea` that calls `preventDefault()` before xterm sees it, sending text exactly once. No clipboard-read permission prompt required.
 - **Session redirect loop** — `GET /unlock` redirected to `/` when `masterKey.isUnlocked()` was true, but the auth guard sent the browser back to `/unlock` when there was no valid session (e.g. expired cookie). Fixed by only redirecting to `/` when both conditions hold: server unlocked AND valid session.

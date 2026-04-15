@@ -1,5 +1,6 @@
 import { Client } from 'ssh2'
 import { randomUUID } from 'node:crypto'
+import { config } from './config.js'
 
 /**
  * Manages active SSH sessions keyed by session ID.
@@ -92,7 +93,13 @@ export class SshManager {
         reject(err)
       })
 
-      client.connect({ host, port, username, readyTimeout: 10000, ...authOpts })
+      client.connect({
+        host, port, username,
+        readyTimeout: 10000,
+        keepaliveInterval: config.sshKeepaliveInterval * 1000,
+        keepaliveCountMax: 3,
+        ...authOpts,
+      })
     })
   }
 
