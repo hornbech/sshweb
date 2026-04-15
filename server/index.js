@@ -260,13 +260,13 @@ app.post('/api/connections', (req, res) => {
   const s = requireStore(res)
   if (!s) return
   const { label, host, port, username, authType, secret } = req.body
-  if (!label || !host || !username || !secret) {
-    return res.status(400).json({ error: 'label, host, username, and secret are required' })
+  if (!label || !host) {
+    return res.status(400).json({ error: 'label and host are required' })
   }
-  if (!['password', 'key'].includes(authType)) {
+  if (authType && !['password', 'key'].includes(authType)) {
     return res.status(400).json({ error: 'authType must be "password" or "key"' })
   }
-  const id = s.create({ label, host, port: Number(port) || 22, username, authType, secret })
+  const id = s.create({ label, host, port: Number(port) || 22, username: username || '', authType: authType || 'password', secret: secret || '' })
   res.status(201).json({ id })
 })
 
