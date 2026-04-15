@@ -22,11 +22,15 @@ const sessionsEl = document.getElementById('active-sessions-list')
 const statusDot = document.getElementById('status-dot')
 
 // ── API helpers ────────────────────────────────────────────────────────────
+function checkAuth(res) {
+  if (res.status === 401) { location.href = '/unlock'; throw new Error('Unauthorized') }
+  return res
+}
 const api = {
-  get: (path) => fetch(path).then(r => r.json()),
-  post: (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  put: (path, body) => fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()),
-  del: (path) => fetch(path, { method: 'DELETE' }).then(r => r.json()),
+  get: (path) => fetch(path).then(checkAuth).then(r => r.json()),
+  post: (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(checkAuth).then(r => r.json()),
+  put: (path, body) => fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(checkAuth).then(r => r.json()),
+  del: (path) => fetch(path, { method: 'DELETE' }).then(checkAuth).then(r => r.json()),
 }
 
 // ── Connections ────────────────────────────────────────────────────────────

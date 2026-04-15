@@ -13,6 +13,7 @@ import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
+import { SessionManager, getSessionToken } from './session.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DIST = join(__dirname, '../dist')
@@ -25,6 +26,7 @@ export const logger = pino({
 
 export const masterKey = new MasterKey(config.dataDir)
 export const sshManager = new SshManager(logger)
+export const sessions = new SessionManager(config.sessionTimeoutMinutes)
 
 /** @type {ConnectionStore|null} */
 let store = null
@@ -90,13 +92,24 @@ const scanLimiter = rateLimit({
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
-// Lock guard middleware — redirect to /unlock unless the path is allowed
-const UNLOCKED_PATHS = ['/unlock', '/api/unlock', '/health']
+function sessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    secure: req.secure || config.nodeEnv === 'production',
+    sameSite: 'strict',
+    path: '/',
+    maxAge: config.sessionTimeoutMinutes * 60, // seconds
+  }
+}
+
+// Auth guard — paths that never require a session
+const PUBLIC_PATHS = ['/unlock', '/api/unlock', '/health']
 app.use((req, res, next) => {
-  if (masterKey.isUnlocked()) return next()
-  if (UNLOCKED_PATHS.some(p => req.path.startsWith(p))) return next()
-  if (req.path.startsWith('/assets') || req.path.startsWith('/favicon')) return next()
-  if (req.path.startsWith('/api/')) return res.status(423).json({ error: 'Server locked' })
+  if (PUBLIC_PATHS.some(p => req.path.startsWith(p))) return next()
+  if (req.path.startsWith('/assets') || req.path.startsWith('/favicon') || req.path === '/logo.svg') return next()
+  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) return next()
+  if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' })
+  res.clearCookie('session', { path: '/' })
   return res.redirect('/unlock')
 })
 
@@ -138,8 +151,11 @@ app.post('/api/unlock', unlockLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Password required' })
   }
   try {
+    const wasLocked = !masterKey.isUnlocked()
     await masterKey.unlock(password)
-    closeStore() // reset store so it picks up new key
+    if (wasLocked) closeStore() // reset store on first unlock
+    const token = sessions.create()
+    res.cookie('session', token, sessionCookieOptions(req))
     logger.info('Server unlocked')
     res.json({ ok: true })
   } catch (err) {
@@ -166,6 +182,8 @@ app.post('/api/lock', (req, res) => {
   }
   masterKey.lock()
   closeStore()
+  sessions.clear()
+  res.clearCookie('session', { path: '/' })
   logger.info('Server locked')
   res.json({ ok: true })
 })
@@ -182,6 +200,9 @@ app.post('/api/change-password', async (req, res) => {
     if (s) s.reencryptAll(newKey)
     masterKey.commitNewPassword(newKey, newSalt)
     closeStore()
+    sessions.clear()
+    const token = sessions.create()
+    res.cookie('session', token, sessionCookieOptions(req))
     logger.info('Master password changed')
     res.json({ ok: true })
   } catch (err) {
@@ -285,9 +306,9 @@ if (existsSync(DIST)) {
 export const server = createServer(app)
 const wss = new WebSocketServer({ server, path: '/ws' })
 
-wss.on('connection', (ws) => {
-  if (!masterKey.isUnlocked()) {
-    ws.close(4001, 'Server locked')
+wss.on('connection', (ws, req) => {
+  if (!masterKey.isUnlocked() || !sessions.validate(getSessionToken(req))) {
+    ws.close(4001, 'Unauthorized')
     return
   }
   if (sshManager.sessionCount >= config.maxSessions) {

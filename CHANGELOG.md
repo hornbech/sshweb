@@ -17,6 +17,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Security
 
+- **Session-based authentication** — unlocking the server now issues an HTTP-only, `SameSite=Strict`, `Secure` session cookie (64 hex chars, 32 random bytes). Every subsequent request — HTTP and WebSocket — is validated against an in-memory session store. Unauthenticated API requests receive `401 Unauthorized`; unauthenticated browser requests are redirected to `/unlock`. Sessions slide their expiry on each validated request and are cleared on lock or password change.
+- `server/session.js` — `SessionManager` class: in-memory `Map<token, expiresAt>`, sliding 60-minute window (configurable via `SESSION_TIMEOUT_MINUTES`), periodic prune of expired tokens, `clear()` on lock. `getSessionToken(req)` parses the `session` cookie from the raw `Cookie` header (works for both Express and the raw Node `IncomingMessage` used by the WebSocket upgrade).
 - **Brute-force protection** — `POST /api/unlock` is now rate-limited to 10 failed attempts per IP per 15 minutes (HTTP 429). Uses `express-rate-limit` with `trust proxy` enabled so the real client IP is used behind Nginx Proxy Manager.
 - **CSRF guard on lock endpoint** — `POST /api/lock` rejects requests carrying a cross-origin `Origin` header (403 Forbidden), preventing a malicious page from locking the server via a browser-initiated request. Direct API calls without an `Origin` header (curl, scripts) are unaffected.
 - **Security headers** — `helmet` middleware added; every response now includes `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Strict-Transport-Security`, and `Permissions-Policy`. `X-Powered-By: Express` header removed.

@@ -104,6 +104,7 @@ All configuration is via environment variables (`.env` file):
 |---|---|---|
 | `PORT` | `3000` | HTTP port the server listens on |
 | `DATA_DIR` | `/data` | Directory for encrypted DB and key files |
+| `SESSION_TIMEOUT_MINUTES` | `60` | Idle session expiry; activity slides the window |
 | `MAX_SESSIONS` | `10` | Maximum concurrent SSH sessions |
 | `LOG_LEVEL` | `info` | Pino log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` |
 
@@ -226,6 +227,12 @@ Every response includes:
 | `Permissions-Policy` | Disables camera, microphone, geolocation |
 
 `X-Powered-By` is suppressed.
+
+### Session Authentication
+
+Unlocking the server issues a **session cookie** (`HttpOnly`, `Secure`, `SameSite=Strict`, 64-char hex token derived from 32 random bytes). Every subsequent HTTP request and WebSocket upgrade is validated against an in-memory session store. Sessions use a sliding expiry window — each validated request resets the clock. Sessions are invalidated on lock or password change.
+
+Unauthenticated API requests receive `401 Unauthorized`. Unauthenticated browser navigation is redirected to `/unlock`.
 
 ### Brute-Force Protection
 

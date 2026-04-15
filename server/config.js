@@ -11,6 +11,7 @@ function parseIntRequired(value, name) {
 export const config = {
   port: parseIntRequired(process.env.PORT ?? '3000', 'PORT'),
   dataDir: process.env.DATA_DIR ?? './data',
+  nodeEnv: process.env.NODE_ENV ?? 'development',
   sessionTimeoutMinutes: parseIntRequired(process.env.SESSION_TIMEOUT_MINUTES ?? '60', 'SESSION_TIMEOUT_MINUTES'),
   maxSessions: parseIntRequired(process.env.MAX_SESSIONS ?? '10', 'MAX_SESSIONS'),
   logLevel: (() => {
