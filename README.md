@@ -196,6 +196,34 @@ What is stored on disk:
 
 **The master password itself is never written to disk.**
 
+### HTTP Security Headers
+
+Every response includes:
+
+| Header | Value |
+|--------|-------|
+| `Content-Security-Policy` | Restricts scripts/styles/workers to `'self'`; blocks frames |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` |
+| `Referrer-Policy` | `no-referrer` |
+| `Permissions-Policy` | Disables camera, microphone, geolocation |
+
+`X-Powered-By` is suppressed.
+
+### Brute-Force Protection
+
+`POST /api/unlock` is rate-limited to **10 failed attempts per IP per 15 minutes**. Subsequent attempts receive `429 Too Many Requests`. The real client IP is resolved via `X-Forwarded-For` when running behind a reverse proxy.
+
+### CSRF Protection
+
+`POST /api/lock` rejects requests with a cross-origin `Origin` header. This prevents a malicious page from locking the server via a browser-initiated request. Direct API calls without an `Origin` header are unaffected.
+
+### Known Accepted Risks
+
+- `POST /api/lock` has no password requirement — a direct (non-browser) caller can lock the server. Accepted trade-off for a single-user homelab; add network-level access control if this is a concern.
+- `GET /api/connections` returns saved host labels and IPs while the server is unlocked. No secrets are included.
+
 ### Network
 
 The app speaks plain HTTP internally. TLS is expected to be terminated by a reverse proxy (Nginx Proxy Manager, Traefik, Caddy). Do not expose port 3000 directly to the internet without TLS.

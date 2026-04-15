@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+
+- **Brute-force protection** — `POST /api/unlock` is now rate-limited to 10 failed attempts per IP per 15 minutes (HTTP 429). Uses `express-rate-limit` with `trust proxy` enabled so the real client IP is used behind Nginx Proxy Manager.
+- **CSRF guard on lock endpoint** — `POST /api/lock` rejects requests carrying a cross-origin `Origin` header (403 Forbidden), preventing a malicious page from locking the server via a browser-initiated request. Direct API calls without an `Origin` header (curl, scripts) are unaffected.
+- **Security headers** — `helmet` middleware added; every response now includes `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, `Strict-Transport-Security`, and `Permissions-Policy`. `X-Powered-By: Express` header removed.
+- **CSP configuration** — permits `'unsafe-inline'` styles (required by xterm.js inline DOM styling) and `blob:` worker sources (xterm.js web worker); all other sources restricted to `'self'`.
+- **Version disclosure removed** — `GET /health` no longer returns the application version.
+
 ### Fixed
 
 - **Docker bind-mount permissions on Linux** — added `entrypoint.sh` that `chown`s `/data` as root before dropping to the `sshweb` user via `su-exec`. Previously, Docker created `./data` as root on the host and the container's non-root user could not write the `salt`/`verify` files on first run.
