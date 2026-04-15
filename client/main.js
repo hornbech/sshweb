@@ -195,6 +195,49 @@ document.getElementById('lock-btn').addEventListener('click', async () => {
   window.location.href = '/unlock'
 })
 
+const changePwModal = document.getElementById('change-pw-modal')
+const changePwForm = document.getElementById('change-pw-form')
+const changePwError = document.getElementById('change-pw-error')
+
+document.getElementById('change-pw-btn').addEventListener('click', () => {
+  changePwForm.reset()
+  changePwError.classList.add('hidden')
+  changePwModal.classList.remove('hidden')
+  changePwForm.elements.currentPassword.focus()
+})
+
+document.getElementById('change-pw-cancel').addEventListener('click', () => changePwModal.classList.add('hidden'))
+changePwModal.addEventListener('click', (e) => { if (e.target === changePwModal) changePwModal.classList.add('hidden') })
+
+changePwForm.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  changePwError.classList.add('hidden')
+  const currentPassword = changePwForm.elements.currentPassword.value
+  const newPassword = changePwForm.elements.newPassword.value
+  const confirmPassword = changePwForm.elements.confirmPassword.value
+  if (newPassword !== confirmPassword) {
+    changePwError.textContent = 'New passwords do not match.'
+    changePwError.classList.remove('hidden')
+    changePwForm.elements.confirmPassword.value = ''
+    changePwForm.elements.confirmPassword.focus()
+    return
+  }
+  const res = await fetch('/api/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (res.ok) {
+    changePwModal.classList.add('hidden')
+  } else {
+    changePwError.textContent = data.error || 'Failed to change password.'
+    changePwError.classList.remove('hidden')
+    changePwForm.elements.currentPassword.value = ''
+    changePwForm.elements.currentPassword.focus()
+  }
+})
+
 async function refreshAdmin() {
   try {
     const health = await api.get('/health')

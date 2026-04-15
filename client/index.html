@@ -21,6 +21,7 @@
         </div>
         <div id="active-sessions-list"></div>
         <button id="lock-btn" class="danger">Lock Server</button>
+        <button id="change-pw-btn" class="secondary">Change Password</button>
       </div>
       <div id="sidebar-footer">
         <span>by <a href="https://github.com/hornbech/sshweb" target="_blank" rel="noopener noreferrer">hornbech</a></span>
@@ -34,6 +35,23 @@
         <p>Select a connection or add a new one.</p>
       </div>
     </main>
+  </div>
+
+  <!-- Change password modal -->
+  <div id="change-pw-modal" class="hidden">
+    <div class="modal-card">
+      <h2>Change Password</h2>
+      <form id="change-pw-form">
+        <input name="currentPassword" type="password" placeholder="Current password" required autocomplete="current-password">
+        <input name="newPassword" type="password" placeholder="New password" required autocomplete="new-password">
+        <input name="confirmPassword" type="password" placeholder="Confirm new password" required autocomplete="new-password">
+        <p id="change-pw-error" class="error hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="change-pw-cancel">Cancel</button>
+          <button type="submit">Change Password</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- New/Edit connection modal -->

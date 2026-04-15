@@ -122,6 +122,29 @@ app.post('/api/lock', (req, res) => {
   res.json({ ok: true })
 })
 
+app.post('/api/change-password', async (req, res) => {
+  if (!masterKey.isUnlocked()) return res.status(423).json({ error: 'Server locked' })
+  const { currentPassword, newPassword } = req.body
+  if (!currentPassword || !newPassword || typeof currentPassword !== 'string' || typeof newPassword !== 'string') {
+    return res.status(400).json({ error: 'currentPassword and newPassword required' })
+  }
+  try {
+    const { newKey, newSalt } = await masterKey.deriveNewKey(currentPassword, newPassword)
+    const s = getStore()
+    if (s) s.reencryptAll(newKey)
+    masterKey.commitNewPassword(newKey, newSalt)
+    closeStore()
+    logger.info('Master password changed')
+    res.json({ ok: true })
+  } catch (err) {
+    if (err.message === 'Invalid master password') {
+      return res.status(401).json({ error: 'Invalid current password' })
+    }
+    logger.error({ err }, 'Change password failed')
+    res.status(500).json({ error: err.message || 'Server error' })
+  }
+})
+
 // Connection CRUD
 app.get('/api/connections', (req, res) => {
   const s = requireStore(res)

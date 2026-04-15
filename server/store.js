@@ -75,6 +75,17 @@ export class ConnectionStore {
     this.#db.prepare('DELETE FROM connections WHERE id = ?').run(id)
   }
 
+  reencryptAll(newKey) {
+    const rows = this.#db.prepare('SELECT id, secret FROM connections').all()
+    const update = this.#db.prepare('UPDATE connections SET secret = ? WHERE id = ?')
+    this.#db.transaction(() => {
+      for (const row of rows) {
+        update.run(encrypt(decrypt(row.secret, this.#key), newKey), row.id)
+      }
+    })()
+    this.#key = Buffer.from(newKey)
+  }
+
   close() {
     this.#db.close()
   }

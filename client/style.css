@@ -48,6 +48,8 @@ body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-
 .session-item button { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 3px; padding: 1px 6px; cursor: pointer; font-size: .75rem; }
 button.danger { width: 100%; margin-top: .5rem; padding: .5rem; background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 4px; cursor: pointer; }
 button.danger:hover { background: var(--accent); color: #fff; }
+button.secondary { width: 100%; margin-top: .5rem; padding: .5rem; background: transparent; border: 1px solid var(--surface2); color: var(--text-muted); border-radius: 4px; cursor: pointer; }
+button.secondary:hover { border-color: var(--text-muted); color: var(--text); }
 #sidebar-footer { border-top: 1px solid var(--surface2); padding: .5rem 1rem; font-size: .72rem; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; }
 #sidebar-footer a { color: var(--text-muted); text-decoration: none; }
 #sidebar-footer a:hover { color: var(--accent); }
@@ -64,7 +66,7 @@ button.danger:hover { background: var(--accent); color: #fff; }
 #no-connection { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--text-muted); }
 
 /* Modal */
-#modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+#modal, #change-pw-modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal-card { background: var(--surface); padding: 1.5rem; border-radius: 8px; width: 360px; }
 .modal-card h2 { margin-bottom: 1rem; }
 .modal-card input, .modal-card select { width: 100%; padding: .5rem; margin-bottom: .75rem; background: var(--bg); border: 1px solid var(--surface2); border-radius: 4px; color: var(--text); }

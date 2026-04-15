@@ -36,6 +36,36 @@ export class MasterKey {
     }
   }
 
+  // Returns { newKey, newSalt } after verifying current password — does not write anything.
+  async deriveNewKey(currentPassword, newPassword) {
+    const salt = this.#getOrCreateSalt()
+    const currentKey = await argon2.hash(currentPassword, {
+      type: argon2.argon2id, salt, raw: true,
+      hashLength: KEY_BYTES, memoryCost: 65536, timeCost: 3, parallelism: 1,
+    })
+    const verifyFile = join(this.#dataDir, VERIFY_FILE)
+    const stored = readFileSync(verifyFile, 'utf8').trim()
+    const candidate = createHmac('sha256', currentKey).update(VERIFY_DATA).digest('base64')
+    if (!timingSafeEqual(Buffer.from(stored), Buffer.from(candidate))) {
+      throw new Error('Invalid master password')
+    }
+    const newSalt = randomBytes(32)
+    const newKey = await argon2.hash(newPassword, {
+      type: argon2.argon2id, salt: newSalt, raw: true,
+      hashLength: KEY_BYTES, memoryCost: 65536, timeCost: 3, parallelism: 1,
+    })
+    return { newKey, newSalt }
+  }
+
+  // Writes new salt + verify and updates in-memory key. Call after re-encrypting the store.
+  commitNewPassword(newKey, newSalt) {
+    const newToken = createHmac('sha256', newKey).update(VERIFY_DATA).digest('base64')
+    writeFileSync(join(this.#dataDir, SALT_FILE), newSalt)
+    writeFileSync(join(this.#dataDir, VERIFY_FILE), newToken, 'utf8')
+    if (this.#key) this.#key.fill(0)
+    this.#key = newKey
+  }
+
   async unlock(password) {
     const salt = this.#getOrCreateSalt()
     const key = await argon2.hash(password, {
