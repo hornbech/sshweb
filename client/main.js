@@ -160,13 +160,14 @@ document.getElementById('new-conn-btn').addEventListener('click', () => openModa
 document.getElementById('cancel-btn').addEventListener('click', closeModal)
 modal.addEventListener('click', (e) => { if (e.target === modal) closeModal() })
 
-function openModal(conn) {
+function openModal(conn, prefill = null) {
   editingId = conn?.id ?? null
   modalTitle.textContent = conn ? 'Edit Connection' : 'New Connection'
   connForm.reset()
-  if (conn) {
-    Object.entries(conn).forEach(([k, v]) => {
-      const el = connForm.elements[k] ?? connForm.elements[k === 'authType' ? 'authType' : null]
+  const fill = conn ?? prefill
+  if (fill) {
+    Object.entries(fill).forEach(([k, v]) => {
+      const el = connForm.elements[k]
       if (el) el.value = v
     })
   }
@@ -188,6 +189,98 @@ connForm.addEventListener('submit', async (e) => {
   closeModal()
   await loadConnections()
 })
+
+// ── Network scan ──────────────────────────────────────────────────────────
+const scanModal = document.getElementById('scan-modal')
+const scanSubnetInput = document.getElementById('scan-subnet')
+const scanStartBtn = document.getElementById('scan-start-btn')
+const scanStatus = document.getElementById('scan-status')
+const scanResultsList = document.getElementById('scan-results')
+let scanSource = null
+
+document.getElementById('scan-btn').addEventListener('click', async () => {
+  scanResultsList.innerHTML = ''
+  scanStatus.textContent = ''
+  scanModal.classList.remove('hidden')
+  scanSubnetInput.focus()
+  if (!scanSubnetInput.value) {
+    try {
+      const data = await api.get('/api/scan/subnets')
+      if (data.subnets?.length) scanSubnetInput.value = data.subnets[0]
+    } catch {}
+  }
+})
+
+document.getElementById('scan-close-btn').addEventListener('click', closeScanModal)
+scanModal.addEventListener('click', (e) => { if (e.target === scanModal) closeScanModal() })
+
+function closeScanModal() {
+  abortScan()
+  scanModal.classList.add('hidden')
+}
+
+function abortScan() {
+  if (scanSource) { scanSource.close(); scanSource = null }
+  scanStartBtn.textContent = 'Scan'
+  scanStartBtn.disabled = false
+}
+
+scanStartBtn.addEventListener('click', () => {
+  if (scanSource) { abortScan(); return }
+  const subnet = scanSubnetInput.value.trim()
+  if (!subnet) { scanStatus.textContent = 'Enter a subnet to scan.'; return }
+  scanResultsList.innerHTML = ''
+  scanStatus.textContent = 'Starting…'
+  scanStartBtn.textContent = 'Stop'
+
+  scanSource = new EventSource(`/api/scan?subnet=${encodeURIComponent(subnet)}`)
+
+  scanSource.onmessage = (e) => {
+    const msg = JSON.parse(e.data)
+    if (msg.done) {
+      const n = scanResultsList.children.length
+      scanStatus.textContent = `Done — ${n} host${n !== 1 ? 's' : ''} with SSH open.`
+      abortScan()
+    } else if (msg.error) {
+      scanStatus.textContent = `Error: ${msg.error}`
+      abortScan()
+    } else if (msg.progress) {
+      scanStatus.textContent = `Scanning ${msg.progress.scanned} / ${msg.progress.total}…`
+    } else if (msg.ip) {
+      appendScanResult(msg)
+    }
+  }
+
+  scanSource.onerror = () => {
+    if (scanSource?.readyState === EventSource.CLOSED) return
+    scanStatus.textContent = 'Stream error — check server logs.'
+    abortScan()
+  }
+})
+
+function appendScanResult({ ip, hostname }) {
+  const li = document.createElement('li')
+  li.className = 'scan-result'
+
+  const ipEl = document.createElement('span')
+  ipEl.className = 'scan-result-ip'
+  ipEl.textContent = ip
+
+  const hostEl = document.createElement('span')
+  hostEl.className = 'scan-result-host'
+  hostEl.textContent = hostname ?? '—'
+
+  const addBtn = document.createElement('button')
+  addBtn.textContent = 'Add'
+  addBtn.addEventListener('click', () => {
+    openModal(null, { host: ip, label: hostname ?? ip, port: 22 })
+  })
+
+  li.appendChild(ipEl)
+  li.appendChild(hostEl)
+  li.appendChild(addBtn)
+  scanResultsList.appendChild(li)
+}
 
 // ── Admin panel ────────────────────────────────────────────────────────────
 document.getElementById('lock-btn').addEventListener('click', async () => {

@@ -12,6 +12,7 @@ import { config } from './config.js'
 import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
 import { SshManager } from './ssh.js'
+import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DIST = join(__dirname, '../dist')
@@ -75,6 +76,15 @@ const unlockLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   handler: (_req, res) => res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' }),
+})
+
+// Rate limit subnet scans (per real IP)
+const scanLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Too many scans. Wait 5 minutes.' }),
 })
 
 app.use(express.json())
@@ -181,6 +191,41 @@ app.post('/api/change-password', async (req, res) => {
     logger.error({ err }, 'Change password failed')
     res.status(500).json({ error: err.message || 'Server error' })
   }
+})
+
+// Network scan
+app.get('/api/scan/subnets', (req, res) => {
+  res.json({ subnets: getLocalSubnets() })
+})
+
+app.get('/api/scan', scanLimiter, (req, res) => {
+  const { subnet } = req.query
+  if (!subnet || typeof subnet !== 'string') {
+    return res.status(400).json({ error: 'subnet query parameter required' })
+  }
+  try {
+    parseCIDR(subnet) // validate before opening the stream
+  } catch (err) {
+    return res.status(400).json({ error: err.message })
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no') // disable Nginx/OpenResty response buffering
+  res.flushHeaders()
+
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`)
+  let aborted = false
+  req.on('close', () => { aborted = true })
+
+  scanSubnet(subnet, {
+    onHost: (host) => send(host),
+    onProgress: (p) => send({ progress: p }),
+    isAborted: () => aborted,
+  })
+    .then(() => { send({ done: true }); res.end() })
+    .catch((err) => { send({ error: err.message }); res.end() })
 })
 
 // Connection CRUD

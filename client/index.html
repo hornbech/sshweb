@@ -15,7 +15,14 @@
           <img src="/logo.svg" alt="" width="22" height="22">
           <span class="logo">sshweb</span>
         </div>
-        <button id="new-conn-btn" title="New connection">+</button>
+        <div class="header-actions">
+          <button id="scan-btn" title="Scan network for SSH servers">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="5.5" cy="5.5" r="4"/><line x1="8.5" y1="8.5" x2="12" y2="12"/>
+            </svg>
+          </button>
+          <button id="new-conn-btn" title="New connection">+</button>
+        </div>
       </div>
       <ul id="connection-list"></ul>
       <div id="admin-panel">
@@ -39,6 +46,22 @@
         <p>Select a connection or add a new one.</p>
       </div>
     </main>
+  </div>
+
+  <!-- Network scan modal -->
+  <div id="scan-modal" class="hidden">
+    <div class="modal-card scan-card">
+      <h2>Scan Network for SSH</h2>
+      <div class="scan-controls">
+        <input id="scan-subnet" type="text" placeholder="e.g. 10.0.0.0/24" spellcheck="false" autocomplete="off">
+        <button id="scan-start-btn" type="button">Scan</button>
+      </div>
+      <p id="scan-status" class="scan-status"></p>
+      <ul id="scan-results" class="scan-results"></ul>
+      <div class="modal-actions">
+        <button type="button" id="scan-close-btn">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- Change password modal -->
