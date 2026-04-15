@@ -129,7 +129,7 @@ app.get('/api/unlock', (req, res) => {
 
 // Unlock page
 app.get('/unlock', (req, res) => {
-  if (masterKey.isUnlocked()) return res.redirect('/')
+  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) return res.redirect('/')
   const distUnlock = join(DIST, 'unlock.html')
   const srcUnlock = join(__dirname, '../client/unlock.html')
   const unlockHtml = existsSync(distUnlock) ? distUnlock : existsSync(srcUnlock) ? srcUnlock : null
