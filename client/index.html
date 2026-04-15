@@ -16,6 +16,11 @@
           <span class="logo">sshweb</span>
         </div>
         <div class="header-actions">
+          <button id="creds-btn" title="Manage credentials">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="15" r="4"/><path d="M12 15h8M16 12v6"/>
+            </svg>
+          </button>
           <button id="scan-btn" title="Scan network for SSH servers">
             <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="5.5" cy="5.5" r="4"/><line x1="8.5" y1="8.5" x2="12" y2="12"/>
@@ -64,6 +69,31 @@
     </div>
   </div>
 
+  <!-- Credentials modal -->
+  <div id="creds-modal" class="hidden">
+    <div class="modal-card creds-card">
+      <h2>Credentials</h2>
+      <ul id="creds-list" class="creds-list"></ul>
+      <hr class="modal-divider">
+      <h3 id="creds-form-title">Add Credential</h3>
+      <form id="creds-form">
+        <input type="hidden" name="id">
+        <input name="name" placeholder="Name (e.g. Home Lab Admin)" required>
+        <input name="username" placeholder="Username" required>
+        <select name="authType">
+          <option value="password">Password</option>
+          <option value="key">Private Key</option>
+        </select>
+        <input name="secret" type="password" placeholder="Password or paste private key" required>
+        <p id="creds-error" class="error hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="creds-cancel">Cancel</button>
+          <button type="submit" id="creds-submit">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Change password modal -->
   <div id="change-pw-modal" class="hidden">
     <div class="modal-card">
@@ -89,12 +119,17 @@
         <input name="label" placeholder="Label (e.g. My Server)" required>
         <input name="host" placeholder="Host / IP" required>
         <input name="port" type="number" value="22" required>
-        <input name="username" placeholder="Username">
-        <select name="authType">
-          <option value="password">Password</option>
-          <option value="key">Private Key</option>
+        <select name="credentialId" id="cred-select">
+          <option value="">— enter credentials below —</option>
         </select>
-        <input id="secret-field" name="secret" type="password" placeholder="Password or paste private key">
+        <div id="inline-cred-fields">
+          <input name="username" placeholder="Username">
+          <select name="authType">
+            <option value="password">Password</option>
+            <option value="key">Private Key</option>
+          </select>
+          <input name="secret" type="password" placeholder="Password or paste private key">
+        </div>
         <div class="modal-actions">
           <button type="button" id="cancel-btn">Cancel</button>
           <button type="submit">Save</button>
