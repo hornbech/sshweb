@@ -1,9 +1,11 @@
 import 'dotenv/config'
 import { createServer } from 'node:http'
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import express from 'express'
+import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import { WebSocketServer } from 'ws'
 import pino from 'pino'
 import { config } from './config.js'
@@ -15,9 +17,6 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DIST = join(__dirname, '../dist')
 const startedAt = Date.now()
 
-// Determine version from package.json
-const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'))
-const VERSION = pkg.version
 
 export const logger = pino({
   level: config.logLevel,
@@ -50,6 +49,34 @@ function requireStore(res) {
 }
 
 export const app = express()
+app.set('trust proxy', 1) // real client IP from X-Forwarded-For (NPM)
+
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"], // xterm.js writes inline styles
+      connectSrc: ["'self'", 'wss:', 'ws:'],   // WebSocket
+      imgSrc: ["'self'", 'data:'],
+      fontSrc: ["'self'"],
+      workerSrc: ["'self'", 'blob:'],           // xterm.js worker
+      objectSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // would break xterm canvas
+}))
+
+// Rate limit unlock attempts (per real IP)
+const unlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' }),
+})
+
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 
@@ -67,7 +94,6 @@ app.use((req, res, next) => {
 app.get('/health', (req, res) => {
   res.json({
     status: masterKey.isUnlocked() ? 'ok' : 'locked',
-    version: VERSION,
     uptime: Math.floor((Date.now() - startedAt) / 1000),
     activeSessions: sshManager.sessionCount,
   })
@@ -96,7 +122,7 @@ app.get('/unlock', (req, res) => {
   }
 })
 
-app.post('/api/unlock', async (req, res) => {
+app.post('/api/unlock', unlockLimiter, async (req, res) => {
   const { password } = req.body
   if (!password || typeof password !== 'string') {
     return res.status(400).json({ error: 'Password required' })
@@ -116,6 +142,18 @@ app.post('/api/unlock', async (req, res) => {
 })
 
 app.post('/api/lock', (req, res) => {
+  // CSRF guard: reject cross-origin browser requests
+  const origin = req.get('origin')
+  if (origin) {
+    const host = req.get('host') ?? ''
+    try {
+      if (new URL(origin).host !== host) {
+        return res.status(403).json({ error: 'Forbidden' })
+      }
+    } catch {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+  }
   masterKey.lock()
   closeStore()
   logger.info('Server locked')

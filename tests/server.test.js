@@ -27,7 +27,7 @@ test('GET /health returns locked status when not unlocked', async () => {
   assert.equal(res.status, 200)
   assert.equal(res.body.status, 'locked')
   assert.ok(typeof res.body.uptime === 'number')
-  assert.ok(typeof res.body.version === 'string')
+  assert.ok(!('version' in res.body)) // version removed to reduce info disclosure
 })
 
 test('GET / redirects to /unlock when locked', async () => {
