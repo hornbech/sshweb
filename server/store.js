@@ -22,15 +22,20 @@ export class ConnectionStore {
         updated_at INTEGER NOT NULL
       )
     `)
+    // Migrate: add credential_id column if absent
+    const cols = this.#db.pragma('table_info(connections)').map(c => c.name)
+    if (!cols.includes('credential_id')) {
+      this.#db.exec('ALTER TABLE connections ADD COLUMN credential_id TEXT DEFAULT NULL')
+    }
   }
 
-  create({ label, host, port = 22, username, authType = 'password', secret }) {
+  create({ label, host, port = 22, username, authType = 'password', secret, credentialId = null }) {
     const id = randomUUID()
     const now = Date.now()
     this.#db.prepare(`
-      INSERT INTO connections (id, label, host, port, username, auth_type, secret, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, label, host, port, username, authType, encrypt(secret, this.#key), now, now)
+      INSERT INTO connections (id, label, host, port, username, auth_type, secret, credential_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, label, host, port, username, authType, encrypt(secret, this.#key), credentialId, now, now)
     return id
   }
 
@@ -42,7 +47,7 @@ export class ConnectionStore {
 
   list() {
     return this.#db
-      .prepare('SELECT id, label, host, port, username, auth_type, created_at, updated_at FROM connections ORDER BY label')
+      .prepare('SELECT id, label, host, port, username, auth_type, credential_id, created_at, updated_at FROM connections ORDER BY label')
       .all()
       .map(row => ({
         id: row.id,
@@ -51,6 +56,7 @@ export class ConnectionStore {
         port: row.port,
         username: row.username,
         authType: row.auth_type,
+        credentialId: row.credential_id ?? null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       }))
@@ -63,11 +69,12 @@ export class ConnectionStore {
     const now = Date.now()
     this.#db.prepare(`
       UPDATE connections
-      SET label = ?, host = ?, port = ?, username = ?, auth_type = ?, secret = ?, updated_at = ?
+      SET label = ?, host = ?, port = ?, username = ?, auth_type = ?, secret = ?, credential_id = ?, updated_at = ?
       WHERE id = ?
     `).run(
       updated.label, updated.host, updated.port, updated.username,
-      updated.authType, encrypt(updated.secret, this.#key), now, id
+      updated.authType, encrypt(updated.secret, this.#key),
+      updated.credentialId ?? null, now, id
     )
   }
 
@@ -99,6 +106,7 @@ export class ConnectionStore {
       username: row.username,
       authType: row.auth_type,
       secret: decrypt(row.secret, this.#key),
+      credentialId: row.credential_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }
