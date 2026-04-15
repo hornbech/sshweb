@@ -21,6 +21,10 @@ export class MasterKey {
     return this.#key !== null
   }
 
+  hasPassword() {
+    return existsSync(join(this.#dataDir, VERIFY_FILE))
+  }
+
   getKey() {
     return this.#key ? Buffer.from(this.#key) : null
   }

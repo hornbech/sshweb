@@ -73,6 +73,11 @@ app.get('/health', (req, res) => {
   })
 })
 
+// Unlock status (first run detection)
+app.get('/api/unlock', (req, res) => {
+  res.json({ firstRun: !masterKey.hasPassword() })
+})
+
 // Unlock page
 app.get('/unlock', (req, res) => {
   if (masterKey.isUnlocked()) return res.redirect('/')
@@ -101,8 +106,12 @@ app.post('/api/unlock', async (req, res) => {
     closeStore() // reset store so it picks up new key
     logger.info('Server unlocked')
     res.json({ ok: true })
-  } catch {
-    res.status(401).json({ error: 'Invalid password' })
+  } catch (err) {
+    if (err.message === 'Invalid master password') {
+      return res.status(401).json({ error: 'Invalid password' })
+    }
+    logger.error({ err }, 'Unlock failed')
+    res.status(500).json({ error: err.message || 'Server error during unlock' })
   }
 })
 

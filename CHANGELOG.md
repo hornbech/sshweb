@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Docker bind-mount permissions on Linux** — added `entrypoint.sh` that `chown`s `/data` as root before dropping to the `sshweb` user via `su-exec`. Previously, Docker created `./data` as root on the host and the container's non-root user could not write the `salt`/`verify` files on first run.
+- **Silent permission errors reported as "Invalid password"** — `POST /api/unlock` now distinguishes auth failures (401) from infrastructure errors (500 with message). File-system errors no longer surface as a misleading "Invalid password".
+- **No first-run UX** — `GET /api/unlock` now returns `{ firstRun: bool }`. The unlock page detects first run and shows a "Set master password" form with a confirm field instead of "Enter your master password". A typo on first entry no longer permanently locks the store.
+
+---
+
 ## [1.0.0] — 2026-04-14
 
 Initial release.

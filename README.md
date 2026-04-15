@@ -62,9 +62,9 @@ make start
 
 Visit `http://localhost:3000`. You will see the unlock page.
 
-**First run:** Enter any password — this becomes your master password. It initialises the encrypted store and is required on every subsequent server start.
+**First run:** The page shows a "Set master password" form with a confirm field. Choose a password — this becomes your master password. It initialises the encrypted store and is required on every subsequent server start.
 
-**Subsequent runs:** Enter the same master password you chose on first run.
+**Subsequent runs:** The page shows the standard unlock form. Enter the same master password you chose on first run.
 
 > The master password is never stored. If you forget it, the only recovery is to delete `data/salt` and `data/verify` (this wipes all saved connections) and start fresh.
 
@@ -240,6 +240,16 @@ sshweb/
 ---
 
 ## Troubleshooting
+
+### "Server error" on first unlock (Linux)
+
+The container entrypoint automatically `chown`s `/data` to the `sshweb` user before starting. If you see a 500 error instead of a successful first-run unlock, check container logs:
+
+```bash
+make logs
+```
+
+A permission error on `/data` will appear in the log. Ensure the bind-mount path is accessible and restart with `make start`.
 
 ### Forgot master password
 

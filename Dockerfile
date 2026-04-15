@@ -15,16 +15,18 @@ WORKDIR /app
 
 RUN addgroup -S sshweb && adduser -S sshweb -G sshweb
 
+RUN apk add --no-cache su-exec
+
 COPY package*.json ./
 RUN npm install --omit=dev --omit=optional
 
 COPY server/ server/
 COPY --from=builder /app/dist dist/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-RUN mkdir -p /data && chown sshweb:sshweb /data
+RUN mkdir -p /data
 VOLUME ["/data"]
-
-USER sshweb
 
 ENV PORT=3000 \
     DATA_DIR=/data \
@@ -38,4 +40,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "server/index.js"]

@@ -9,33 +9,80 @@
 <body class="unlock-page">
   <div class="unlock-card">
     <h1>sshweb</h1>
-    <p>Enter your master password to unlock.</p>
+    <p id="subtitle">Loading...</p>
     <form id="unlock-form">
       <input id="password" type="password" placeholder="Master password" autofocus required>
-      <button type="submit">Unlock</button>
+      <input id="confirm" type="password" placeholder="Confirm password" required style="display:none">
+      <button type="submit" id="submit-btn">Unlock</button>
       <p id="error-msg" class="error hidden"></p>
     </form>
   </div>
   <script type="module">
+    const subtitleEl = document.getElementById('subtitle')
+    const confirmEl = document.getElementById('confirm')
+    const submitBtn = document.getElementById('submit-btn')
+    const errEl = document.getElementById('error-msg')
+
+    let isFirstRun = false
+
+    async function init() {
+      try {
+        const res = await fetch('/api/unlock')
+        const data = await res.json()
+        isFirstRun = data.firstRun
+      } catch {
+        isFirstRun = false
+      }
+
+      if (isFirstRun) {
+        subtitleEl.textContent = 'No password set yet. Choose a master password to protect your connections.'
+        confirmEl.style.display = ''
+        submitBtn.textContent = 'Set Password & Unlock'
+      } else {
+        subtitleEl.textContent = 'Enter your master password to unlock.'
+        submitBtn.textContent = 'Unlock'
+      }
+    }
+
     document.getElementById('unlock-form').addEventListener('submit', async (e) => {
       e.preventDefault()
       const password = document.getElementById('password').value
-      const errEl = document.getElementById('error-msg')
       errEl.classList.add('hidden')
+
+      if (isFirstRun) {
+        const confirm = confirmEl.value
+        if (password !== confirm) {
+          errEl.textContent = 'Passwords do not match.'
+          errEl.classList.remove('hidden')
+          confirmEl.value = ''
+          confirmEl.focus()
+          return
+        }
+      }
+
       const res = await fetch('/api/unlock', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
       })
+
       if (res.ok) {
         window.location.href = '/'
       } else {
-        errEl.textContent = 'Invalid password. Try again.'
+        const data = await res.json().catch(() => ({}))
+        if (res.status === 500) {
+          errEl.textContent = 'Server error: ' + (data.error || 'check container logs.')
+        } else {
+          errEl.textContent = 'Invalid password. Try again.'
+          document.getElementById('password').value = ''
+          if (isFirstRun) confirmEl.value = ''
+          document.getElementById('password').focus()
+        }
         errEl.classList.remove('hidden')
-        document.getElementById('password').value = ''
-        document.getElementById('password').focus()
       }
     })
+
+    init()
   </script>
 </body>
 </html>
