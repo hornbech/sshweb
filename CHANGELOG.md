@@ -9,6 +9,12 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Network scanner** — magnifying glass button in the sidebar header opens a scan modal. Enter a subnet in CIDR notation (e.g. `10.0.0.0/24`) and click Scan. Results stream in live via Server-Sent Events as hosts with port 22 open are found. Each result shows the IP address and reverse-DNS hostname where available. Click **Add** on any result to pre-populate the new connection modal.
+- `GET /api/scan/subnets` — returns the server's non-loopback IPv4 subnets for auto-fill (empty when running inside a Docker bridge network wider than /22).
+- `GET /api/scan?subnet=x.x.x.x/n` — SSE endpoint. Accepts /22–/30 subnets (max 1022 hosts). Streams `{ip, hostname}` events per open host, `{progress}` per batch of 50, and `{done}` on completion. Rate-limited to 5 scans per IP per 5 minutes. Aborts cleanly when the client disconnects.
+
 ### Security
 
 - **Brute-force protection** — `POST /api/unlock` is now rate-limited to 10 failed attempts per IP per 15 minutes (HTTP 429). Uses `express-rate-limit` with `trust proxy` enabled so the real client IP is used behind Nginx Proxy Manager.

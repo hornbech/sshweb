@@ -14,6 +14,7 @@ A personal homelab web-based SSH terminal. Open a browser, unlock with your mast
 - **Encrypted credential store** — SSH passwords and private keys are AES-256-GCM encrypted at rest in a SQLite database
 - **Master password** — Argon2id key derivation; the master password is never stored, only an HMAC verification token
 - **Web unlock page** — container starts locked; unlock via browser on first visit
+- **Network scanner** — scan a subnet for SSH servers (port 22); results stream live with reverse-DNS hostnames; one click to add a discovered host as a saved connection
 - **Admin panel** — view active sessions, kill sessions, lock the server, monitor uptime
 - **Docker deployment** — single container, multi-stage image, non-root runtime user
 - **Nginx Proxy Manager ready** — plain HTTP inside the container; SSL/TLS terminates at NPM
@@ -67,6 +68,21 @@ Visit `http://localhost:3000`. You will see the unlock page.
 **Subsequent runs:** The page shows the standard unlock form. Enter the same master password you chose on first run.
 
 > The master password is never stored. If you forget it, the only recovery is to delete `data/salt` and `data/verify` (this wipes all saved connections) and start fresh.
+
+---
+
+## Network Scanner
+
+Click the **magnifying glass** button in the sidebar header to open the scanner.
+
+1. Enter your subnet in CIDR notation — e.g. `10.0.0.0/24`
+2. Click **Scan** — results appear live as hosts with port 22 open are found
+3. Each result shows the IP and reverse-DNS hostname (where available)
+4. Click **Add** on any result to pre-populate the new connection form
+
+> **Note:** The scanner runs inside the Docker container. On Linux it can reach your LAN through the Docker bridge. The subnet auto-fill is empty when the container's bridge network is wider than /22 — just type your subnet manually.
+
+Accepted subnet sizes: `/22` to `/30` (up to 1022 hosts). Scans are rate-limited to 5 per IP per 5 minutes.
 
 ---
 
