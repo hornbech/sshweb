@@ -9,9 +9,10 @@ A personal homelab web-based SSH terminal. Open a browser, unlock with your mast
 ## Features
 
 - **Browser-based SSH terminal** — full xterm.js terminal emulator with color, resize, and hyperlink support
-- **Connection manager** — save named connections; click to open an instant terminal tab
+- **Connection manager** — save named connections; click to open an instant terminal tab; edit or delete from the sidebar
+- **Credential manager** — save reusable credentials (username + auth + secret) and link them to multiple connections; update once, applies everywhere
 - **Multiple tabs** — open several SSH sessions simultaneously, switch between them freely
-- **Encrypted credential store** — SSH passwords and private keys are AES-256-GCM encrypted at rest in a SQLite database
+- **Encrypted storage** — SSH secrets and credentials are AES-256-GCM encrypted at rest in SQLite; master password never stored
 - **Master password** — Argon2id key derivation; the master password is never stored, only an HMAC verification token
 - **Web unlock page** — container starts locked; unlock via browser on first visit
 - **Network scanner** — scan a subnet for SSH servers (port 22); results stream live with reverse-DNS hostnames; one click to add a discovered host as a saved connection

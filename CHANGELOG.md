@@ -11,6 +11,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Credential manager** — key icon (🔑) button in the sidebar header opens a credentials modal. Save reusable credentials (name, username, auth type, secret) encrypted at rest with AES-256-GCM. Assign a credential to one or more connections via a dropdown in the connection form — the username/auth fields hide when a credential is selected. Credentials are resolved at connect time so updating a credential propagates to every linked server instantly.
+- `server/credentials.js` — `CredentialStore` class mirrors `ConnectionStore`: in-memory encryption key, full CRUD, `reencryptAll` called alongside connections on master password change.
+- `GET /api/credentials` — list all credentials (no secrets returned).
+- `POST /api/credentials` — create credential.
+- `GET /api/credentials/:id` — get single credential with decrypted secret.
+- `PUT /api/credentials/:id` — update credential.
+- `DELETE /api/credentials/:id` — delete credential; returns `409 Conflict` if any connection still references it.
+- `connections` table gains a nullable `credential_id` column (auto-migrated on startup via `ALTER TABLE ADD COLUMN`). Fully backward-compatible — existing connections with `NULL` credential_id continue using inline fields.
+- **Edit connection** — hover a connection in the sidebar to reveal a ✎ edit button. Fetches the full record (including decrypted secret) and opens the connection modal pre-filled.
+- **Optional credentials on new connections** — username and secret are no longer required when saving a connection (e.g. when adding from scan results). Fill them in later via edit.
+- **Ctrl+V paste into terminal** — paste event on the terminal textarea sends clipboard text to the SSH session. Right-click paste also works.
 - **Network scanner** — magnifying glass button in the sidebar header opens a scan modal. Enter a subnet in CIDR notation (e.g. `10.0.0.0/24`) and click Scan. Results stream in live via Server-Sent Events as hosts with port 22 open are found. Each result shows the IP address and reverse-DNS hostname where available. Click **Add** on any result to pre-populate the new connection modal.
 - `GET /api/scan/subnets` — returns the server's non-loopback IPv4 subnets for auto-fill (empty when running inside a Docker bridge network wider than /22).
 - `GET /api/scan?subnet=x.x.x.x/n` — SSE endpoint. Accepts /22–/30 subnets (max 1022 hosts). Streams `{ip, hostname}` events per open host, `{progress}` per batch of 50, and `{done}` on completion. Rate-limited to 5 scans per IP per 5 minutes. Aborts cleanly when the client disconnects.
@@ -27,6 +38,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Terminal garbled Unicode / box-drawing characters** — SSH output was decoded with `atob()` producing a Latin-1 binary string; xterm.js misinterpreted multi-byte UTF-8 sequences. Fixed by passing a `Uint8Array` of raw bytes so xterm.js performs correct UTF-8 decoding.
+- **Ctrl+V pasted text twice** — clipboard API handler and xterm's native paste event both fired, sending text twice. Replaced clipboard API approach with a `paste` event listener on `term.textarea` that calls `preventDefault()` before xterm sees it, sending text exactly once. No clipboard-read permission prompt required.
+- **Session redirect loop** — `GET /unlock` redirected to `/` when `masterKey.isUnlocked()` was true, but the auth guard sent the browser back to `/unlock` when there was no valid session (e.g. expired cookie). Fixed by only redirecting to `/` when both conditions hold: server unlocked AND valid session.
+- **Session cookie expired in ~3 seconds** — `maxAge` for Express cookies is milliseconds; the code was passing seconds (`SESSION_TIMEOUT_MINUTES * 60`). Fixed to `* 60 * 1000`.
 - **Docker bind-mount permissions on Linux** — added `entrypoint.sh` that `chown`s `/data` as root before dropping to the `sshweb` user via `su-exec`. Previously, Docker created `./data` as root on the host and the container's non-root user could not write the `salt`/`verify` files on first run.
 - **Silent permission errors reported as "Invalid password"** — `POST /api/unlock` now distinguishes auth failures (401) from infrastructure errors (500 with message). File-system errors no longer surface as a misleading "Invalid password".
 - **No first-run UX** — `GET /api/unlock` now returns `{ firstRun: bool }`. The unlock page detects first run and shows a "Set master password" form with a confirm field instead of "Enter your master password". A typo on first entry no longer permanently locks the store.
