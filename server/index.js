@@ -11,6 +11,7 @@ import pino from 'pino'
 import { config } from './config.js'
 import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
+import { CredentialStore } from './credentials.js'
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 import { SessionManager, getSessionToken } from './session.js'
@@ -31,6 +32,9 @@ export const sessions = new SessionManager(config.sessionTimeoutMinutes)
 /** @type {ConnectionStore|null} */
 let store = null
 
+/** @type {CredentialStore|null} */
+let credStore = null
+
 function getStore() {
   if (!store && masterKey.isUnlocked()) {
     store = new ConnectionStore(
@@ -41,8 +45,29 @@ function getStore() {
   return store
 }
 
+function getCredStore() {
+  if (!credStore && masterKey.isUnlocked()) {
+    credStore = new CredentialStore(
+      join(config.dataDir, 'credentials.db'),
+      masterKey.getKey()
+    )
+  }
+  return credStore
+}
+
+function closeCredStore() {
+  if (credStore) { credStore.close(); credStore = null }
+}
+
+function requireCredStore(res) {
+  const s = getCredStore()
+  if (!s) { res.status(423).json({ error: 'Server locked' }); return null }
+  return s
+}
+
 function closeStore() {
   if (store) { store.close(); store = null }
+  closeCredStore()
 }
 
 function requireStore(res) {
@@ -206,6 +231,8 @@ app.post('/api/change-password', async (req, res) => {
     const { newKey, newSalt } = await masterKey.deriveNewKey(currentPassword, newPassword)
     const s = getStore()
     if (s) s.reencryptAll(newKey)
+    const cs = getCredStore()
+    if (cs) cs.reencryptAll(newKey)
     masterKey.commitNewPassword(newKey, newSalt)
     closeStore()
     sessions.clear()
@@ -300,6 +327,62 @@ app.delete('/api/connections/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+// Credential CRUD
+app.get('/api/credentials', (req, res) => {
+  const s = requireCredStore(res)
+  if (!s) return
+  res.json(s.list())
+})
+
+app.post('/api/credentials', (req, res) => {
+  const s = requireCredStore(res)
+  if (!s) return
+  const { name, username, authType, secret } = req.body
+  if (!name || !username || !secret) {
+    return res.status(400).json({ error: 'name, username, and secret are required' })
+  }
+  if (authType && !['password', 'key'].includes(authType)) {
+    return res.status(400).json({ error: 'authType must be "password" or "key"' })
+  }
+  const id = s.create({ name, username, authType: authType || 'password', secret })
+  res.status(201).json({ id })
+})
+
+app.get('/api/credentials/:id', (req, res) => {
+  const s = requireCredStore(res)
+  if (!s) return
+  const cred = s.get(req.params.id)
+  if (!cred) return res.status(404).json({ error: 'Not found' })
+  res.json(cred)
+})
+
+app.put('/api/credentials/:id', (req, res) => {
+  const s = requireCredStore(res)
+  if (!s) return
+  try {
+    s.update(req.params.id, req.body)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(404).json({ error: err.message })
+  }
+})
+
+app.delete('/api/credentials/:id', (req, res) => {
+  const s = requireCredStore(res)
+  if (!s) return
+  const connStore = getStore()
+  if (connStore) {
+    const refs = connStore.list().filter(c => c.credentialId === req.params.id)
+    if (refs.length > 0) {
+      return res.status(409).json({
+        error: `Credential is used by ${refs.length} connection${refs.length !== 1 ? 's' : ''}. Unlink them first.`
+      })
+    }
+  }
+  s.delete(req.params.id)
+  res.json({ ok: true })
+})
+
 // Active sessions (admin)
 app.get('/api/sessions', (req, res) => {
   res.json(sshManager.listSessions())
@@ -347,9 +430,18 @@ wss.on('connection', (ws, req) => {
         const conn = s.get(connectionId)
         if (!conn) { ws.close(4003, 'Connection not found'); return }
 
+        let resolvedConn = conn
+        if (conn.credentialId) {
+          const cs = getCredStore()
+          const cred = cs?.get(conn.credentialId)
+          if (cred) {
+            resolvedConn = { ...conn, username: cred.username, authType: cred.authType, secret: cred.secret }
+          }
+        }
+
         try {
           sessionId = await sshManager.open({
-            ...conn, ws, cols: cols ?? 80, rows: rows ?? 24,
+            ...resolvedConn, ws, cols: cols ?? 80, rows: rows ?? 24,
           })
           ws.send(JSON.stringify({ type: 'connected', sessionId }))
         } catch (err) {
