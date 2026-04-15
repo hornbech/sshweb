@@ -98,7 +98,7 @@ function sessionCookieOptions(req) {
     secure: req.secure || config.nodeEnv === 'production',
     sameSite: 'strict',
     path: '/',
-    maxAge: config.sessionTimeoutMinutes * 60, // seconds
+    maxAge: config.sessionTimeoutMinutes * 60 * 1000, // milliseconds
   }
 }
 
