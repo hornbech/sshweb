@@ -278,6 +278,14 @@ app.post('/api/connections', (req, res) => {
   res.status(201).json({ id })
 })
 
+app.get('/api/connections/:id', (req, res) => {
+  const s = requireStore(res)
+  if (!s) return
+  const conn = s.get(req.params.id)
+  if (!conn) return res.status(404).json({ error: 'Not found' })
+  res.json(conn)
+})
+
 app.put('/api/connections/:id', (req, res) => {
   const s = requireStore(res)
   if (!s) return

@@ -55,6 +55,16 @@ function renderConnectionList() {
     info.appendChild(labelSpan)
     info.appendChild(hostSpan)
 
+    const editBtn = document.createElement('button')
+    editBtn.className = 'conn-edit'
+    editBtn.title = 'Edit connection'
+    editBtn.textContent = '✎'
+    editBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const full = await api.get(`/api/connections/${conn.id}`)
+      openModal(full)
+    })
+
     const deleteBtn = document.createElement('button')
     deleteBtn.className = 'conn-delete'
     deleteBtn.title = 'Delete connection'
@@ -67,6 +77,7 @@ function renderConnectionList() {
     })
 
     li.appendChild(info)
+    li.appendChild(editBtn)
     li.appendChild(deleteBtn)
     li.addEventListener('click', () => openTerminal(conn))
     connList.appendChild(li)
