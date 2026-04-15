@@ -19,19 +19,24 @@ from pathlib import Path
 DRY_RUN = '--dry-run' in sys.argv
 CLAUDE_DIR = Path.home() / '.claude'
 
-# Detect the Windows base path from installed_plugins.json or known_marketplaces.json
+# Detect the Windows base path from installed_plugins.json or known_marketplaces.json.
+# In JSON files backslashes are escaped, so C:\Users\jhh\.claude appears in the raw
+# file text as C:\\Users\\jhh\\.claude — match both variants.
 def find_windows_base(claude_dir):
     candidates = [
         claude_dir / 'plugins' / 'installed_plugins.json',
         claude_dir / 'plugins' / 'known_marketplaces.json',
     ]
-    pattern = re.compile(r'([A-Za-z]:\\Users\\[^\\]+\\.claude)', re.IGNORECASE)
+    # Match single-backslash form (C:\Users\jhh\.claude) and
+    # double-backslash JSON-escaped form (C:\\Users\\jhh\\.claude)
+    pattern = re.compile(r'([A-Za-z]:\\{1,2}Users\\{1,2}[^\\]+\\{1,2}\.claude)', re.IGNORECASE)
     for path in candidates:
         if path.exists():
             text = path.read_text(encoding='utf-8')
             m = pattern.search(text)
             if m:
-                return m.group(1)
+                # Normalise to single backslashes so win_to_linux can derive all variants
+                return m.group(1).replace('\\\\', '\\')
     return None
 
 def win_to_linux(text, win_base, linux_base):
