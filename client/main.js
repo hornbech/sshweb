@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css'
 const tabs = new Map()   // tabId -> { term, fitAddon, ws, sessionId, label }
 let activeTab = null
 let connections = []
+let credentials = []
 let editingId = null
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -20,6 +21,13 @@ const modalTitle = document.getElementById('modal-title')
 const uptimeEl = document.getElementById('uptime')
 const sessionsEl = document.getElementById('active-sessions-list')
 const statusDot = document.getElementById('status-dot')
+const credsModal = document.getElementById('creds-modal')
+const credsList = document.getElementById('creds-list')
+const credsForm = document.getElementById('creds-form')
+const credsFormTitle = document.getElementById('creds-form-title')
+const credsError = document.getElementById('creds-error')
+const credSelect = document.getElementById('cred-select')
+const inlineCredFields = document.getElementById('inline-cred-fields')
 
 // ── API helpers ────────────────────────────────────────────────────────────
 function checkAuth(res) {
@@ -83,6 +91,128 @@ function renderConnectionList() {
     connList.appendChild(li)
   }
 }
+
+// ── Credentials ───────────────────────────────────────────────────────────────
+async function loadCredentials() {
+  credentials = await api.get('/api/credentials')
+  renderCredentialList()
+  renderCredentialDropdown()
+}
+
+function renderCredentialList() {
+  credsList.innerHTML = ''
+  for (const cred of credentials) {
+    const li = document.createElement('li')
+    li.className = 'cred-item'
+
+    const info = document.createElement('div')
+    info.className = 'cred-info'
+    const nameSpan = document.createElement('span')
+    nameSpan.className = 'cred-name'
+    nameSpan.textContent = cred.name
+    const userSpan = document.createElement('span')
+    userSpan.className = 'cred-username'
+    userSpan.textContent = cred.username
+    info.appendChild(nameSpan)
+    info.appendChild(userSpan)
+
+    const editBtn = document.createElement('button')
+    editBtn.className = 'cred-edit'
+    editBtn.title = 'Edit'
+    editBtn.textContent = '✎'
+    editBtn.addEventListener('click', async () => {
+      const full = await api.get(`/api/credentials/${cred.id}`)
+      openCredForm(full)
+    })
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'cred-delete'
+    deleteBtn.title = 'Delete'
+    deleteBtn.textContent = '✕'
+    deleteBtn.addEventListener('click', async () => {
+      credsError.classList.add('hidden')
+      const res = await fetch(`/api/credentials/${cred.id}`, { method: 'DELETE' })
+      if (res.status === 409) {
+        const data = await res.json()
+        credsError.textContent = data.error
+        credsError.classList.remove('hidden')
+        return
+      }
+      await loadCredentials()
+    })
+
+    li.appendChild(info)
+    li.appendChild(editBtn)
+    li.appendChild(deleteBtn)
+    credsList.appendChild(li)
+  }
+}
+
+function renderCredentialDropdown() {
+  const current = credSelect.value
+  while (credSelect.options.length > 1) credSelect.remove(1)
+  for (const cred of credentials) {
+    const opt = document.createElement('option')
+    opt.value = cred.id
+    opt.textContent = `${cred.name} (${cred.username})`
+    credSelect.appendChild(opt)
+  }
+  credSelect.value = current
+  toggleInlineCredFields()
+}
+
+function toggleInlineCredFields() {
+  inlineCredFields.style.display = credSelect.value ? 'none' : ''
+}
+
+credSelect.addEventListener('change', toggleInlineCredFields)
+
+document.getElementById('creds-btn').addEventListener('click', async () => {
+  await loadCredentials()
+  openCredForm(null)
+  credsModal.classList.remove('hidden')
+})
+
+document.getElementById('creds-cancel').addEventListener('click', () => closeCredModal())
+credsModal.addEventListener('click', (e) => { if (e.target === credsModal) closeCredModal() })
+
+function closeCredModal() {
+  credsModal.classList.add('hidden')
+  openCredForm(null)
+}
+
+function openCredForm(cred) {
+  credsForm.reset()
+  credsError.classList.add('hidden')
+  if (cred) {
+    credsFormTitle.textContent = 'Edit Credential'
+    credsForm.elements.id.value = cred.id
+    credsForm.elements.name.value = cred.name
+    credsForm.elements.username.value = cred.username
+    credsForm.elements.authType.value = cred.authType
+    credsForm.elements.secret.value = cred.secret
+    document.getElementById('creds-submit').textContent = 'Save'
+  } else {
+    credsFormTitle.textContent = 'Add Credential'
+    credsForm.elements.id.value = ''
+    document.getElementById('creds-submit').textContent = 'Add'
+  }
+}
+
+credsForm.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  credsError.classList.add('hidden')
+  const data = Object.fromEntries(new FormData(credsForm))
+  const editingCredId = data.id
+  delete data.id
+  if (editingCredId) {
+    await api.put(`/api/credentials/${editingCredId}`, data)
+  } else {
+    await api.post('/api/credentials', data)
+  }
+  await loadCredentials()
+  openCredForm(null)
+})
 
 // ── Terminal tabs ──────────────────────────────────────────────────────────
 function openTerminal(conn) {
@@ -189,9 +319,16 @@ function openModal(conn, prefill = null) {
   editingId = conn?.id ?? null
   modalTitle.textContent = conn ? 'Edit Connection' : 'New Connection'
   connForm.reset()
+  credSelect.value = ''
+  toggleInlineCredFields()
   const fill = conn ?? prefill
   if (fill) {
     Object.entries(fill).forEach(([k, v]) => {
+      if (k === 'credentialId') {
+        credSelect.value = v ?? ''
+        toggleInlineCredFields()
+        return
+      }
       const el = connForm.elements[k]
       if (el) el.value = v
     })
@@ -206,6 +343,12 @@ connForm.addEventListener('submit', async (e) => {
   e.preventDefault()
   const data = Object.fromEntries(new FormData(connForm))
   data.port = parseInt(data.port, 10)
+  if (data.credentialId) {
+    data.username = ''
+    data.secret = ''
+  } else {
+    data.credentialId = null
+  }
   if (editingId) {
     await api.put(`/api/connections/${editingId}`, data)
   } else {
@@ -400,5 +543,6 @@ ro.observe(termContainer)
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadConnections()
+loadCredentials()
 refreshAdmin()
 setInterval(refreshAdmin, 15_000)
