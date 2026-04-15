@@ -245,14 +245,19 @@ function openTerminal(conn) {
 
   ws.onclose = () => term.write('\r\n[Disconnected]\r\n')
 
+  // Prevent xterm from treating Ctrl+V as the \x16 control character.
+  // The paste event handler below sends the actual clipboard text.
   term.attachCustomKeyEventHandler((e) => {
-    if (e.type === 'keydown' && e.ctrlKey && e.key === 'v') {
-      navigator.clipboard.readText().then((text) => {
-        ws.send(JSON.stringify({ type: 'data', data: btoa(text) }))
-      }).catch(() => {})
-      return false // prevent xterm from handling it
-    }
+    if (e.type === 'keydown' && e.ctrlKey && e.key === 'v') return false
     return true
+  })
+
+  // Handle paste (Ctrl+V, right-click paste) — prevent xterm's own paste
+  // handler so text isn't sent twice via onData.
+  term.textarea?.addEventListener('paste', (e) => {
+    e.preventDefault()
+    const text = e.clipboardData?.getData('text') ?? ''
+    if (text) ws.send(JSON.stringify({ type: 'data', data: btoa(text) }))
   })
 
   term.onData((data) => {
