@@ -238,7 +238,7 @@ function openTerminal(conn) {
 
   ws.onmessage = ({ data }) => {
     const msg = JSON.parse(data)
-    if (msg.type === 'data') term.write(atob(msg.data))
+    if (msg.type === 'data') term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)))
     else if (msg.type === 'error') { term.write(`\r\nError: ${msg.message}\r\n`); ws.close() }
     else if (msg.type === 'close') { term.write('\r\n[Connection closed]\r\n') }
   }
