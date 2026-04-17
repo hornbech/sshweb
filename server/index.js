@@ -12,6 +12,9 @@ import { config } from './config.js'
 import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
 import { CredentialStore } from './credentials.js'
+import { BookmarkStore } from './bookmarks.js'
+import { createWebProxy } from './webproxy.js'
+import { CookieJarStore } from './cookiejars.js'
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 import { SessionManager, getSessionToken } from './session.js'
@@ -28,6 +31,16 @@ export const logger = pino({
 export const masterKey = new MasterKey(config.dataDir)
 export const sshManager = new SshManager(logger)
 export const sessions = new SessionManager(config.sessionTimeoutMinutes)
+
+// Web proxy state
+const cookieJars = new CookieJarStore()
+const tlsOverrides = new Set()
+const openTabs = new Map() // token -> [{ tabId, url }]
+sessions.onClear((token) => {
+  cookieJars.clearSession(token)
+  for (const key of tlsOverrides) if (key.startsWith(`${token}|`)) tlsOverrides.delete(key)
+  openTabs.delete(token)
+})
 
 /** @type {ConnectionStore|null} */
 let store = null
@@ -55,6 +68,26 @@ function getCredStore() {
   return credStore
 }
 
+/** @type {BookmarkStore|null} */
+let bookmarkStore = null
+
+function getBookmarkStore() {
+  if (!bookmarkStore && masterKey.isUnlocked()) {
+    bookmarkStore = new BookmarkStore(join(config.dataDir, 'bookmarks.db'))
+  }
+  return bookmarkStore
+}
+
+function closeBookmarkStore() {
+  if (bookmarkStore) { bookmarkStore.close(); bookmarkStore = null }
+}
+
+function requireBookmarkStore(res) {
+  const s = getBookmarkStore()
+  if (!s) { res.status(423).json({ error: 'Server locked' }); return null }
+  return s
+}
+
 function closeCredStore() {
   if (credStore) { credStore.close(); credStore = null }
 }
@@ -68,6 +101,7 @@ function requireCredStore(res) {
 function closeStore() {
   if (store) { store.close(); store = null }
   closeCredStore()
+  closeBookmarkStore()
 }
 
 function requireStore(res) {
@@ -86,6 +120,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // xterm.js writes inline styles
       connectSrc: ["'self'", 'wss:', 'ws:'],   // WebSocket
+      frameSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       fontSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],           // xterm.js worker
@@ -140,7 +175,10 @@ const PUBLIC_PATHS = ['/unlock', '/api/unlock', '/health']
 app.use((req, res, next) => {
   if (PUBLIC_PATHS.some(p => req.path.startsWith(p))) return next()
   if (req.path.startsWith('/assets') || req.path.startsWith('/favicon') || req.path === '/logo.svg') return next()
-  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) return next()
+  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) {
+    req.sshwebSessionId = getSessionToken(req)
+    return next()
+  }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' })
   res.clearCookie('session', { path: '/' })
   return res.redirect('/unlock')
@@ -383,6 +421,76 @@ app.delete('/api/credentials/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+// Bookmark CRUD
+app.get('/api/bookmarks', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  res.json(s.list())
+})
+
+app.post('/api/bookmarks', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  const { label, url, ignoreTls } = req.body
+  if (!label || !url) return res.status(400).json({ error: 'label and url are required' })
+  try { new URL(url) } catch { return res.status(400).json({ error: 'invalid url' }) }
+  const id = s.create({ label, url, ignoreTls: !!ignoreTls })
+  res.status(201).json({ id })
+})
+
+app.get('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  const bm = s.get(req.params.id)
+  if (!bm) return res.status(404).json({ error: 'Not found' })
+  res.json(bm)
+})
+
+app.put('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  try { s.update(req.params.id, req.body); res.json({ ok: true }) }
+  catch (err) { res.status(404).json({ error: err.message }) }
+})
+
+app.delete('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  s.delete(req.params.id)
+  res.json({ ok: true })
+})
+
+// TLS override (session-scoped "proceed anyway")
+app.post('/api/tls-override', (req, res) => {
+  const { origin } = req.body
+  if (!origin || typeof origin !== 'string') return res.status(400).json({ error: 'origin required' })
+  try { new URL(origin) } catch { return res.status(400).json({ error: 'invalid origin' }) }
+  tlsOverrides.add(`${req.sshwebSessionId}|${origin}`)
+  res.json({ ok: true })
+})
+
+// Tab restore (per-session open web tabs)
+app.get('/api/tabs', (req, res) => {
+  res.json(openTabs.get(req.sshwebSessionId) ?? [])
+})
+app.put('/api/tabs', (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'array required' })
+  const cleaned = req.body
+    .filter(t => t && typeof t.tabId === 'string' && typeof t.url === 'string')
+    .slice(0, 20) // bound memory
+  openTabs.set(req.sshwebSessionId, cleaned)
+  res.json({ ok: true })
+})
+
+// Admin — web proxy state
+app.get('/api/admin/web', (_req, res) => {
+  res.json({
+    activeCookieSessions: cookieJars.sessionCount(),
+    openTabs: [...openTabs.values()].reduce((n, arr) => n + arr.length, 0),
+    tlsOverrides: tlsOverrides.size,
+  })
+})
+
+app.post('/api/admin/web/clear-cookies', (_req, res) => {
+  cookieJars.clearAll()
+  res.json({ ok: true })
+})
+
 // Active sessions (admin)
 app.get('/api/sessions', (req, res) => {
   res.json(sshManager.listSessions())
@@ -392,6 +500,22 @@ app.delete('/api/sessions/:id', (req, res) => {
   sshManager.kill(req.params.id)
   res.json({ ok: true })
 })
+
+// Web proxy (must be before SPA fallback)
+app.use(createWebProxy({
+  cookieJars,
+  bookmarks: {
+    getByOrigin(origin) {
+      const s = getBookmarkStore()
+      if (!s) return null
+      return s.list().find(b => {
+        try { return new URL(b.url).origin === origin }
+        catch { return false }
+      }) ?? null
+    },
+  },
+  tlsOverrides,
+}))
 
 // Serve built frontend (production)
 if (existsSync(DIST)) {

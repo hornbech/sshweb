@@ -4,10 +4,11 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import '@xterm/xterm/css/xterm.css'
 
 // ── State ──────────────────────────────────────────────────────────────────
-const tabs = new Map()   // tabId -> { term, fitAddon, ws, sessionId, label }
+const tabs = new Map()   // tabId -> { kind: 'ssh'|'web', ... }
 let activeTab = null
 let connections = []
 let credentials = []
+let bookmarks = []
 let editingId = null
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
@@ -28,6 +29,11 @@ const credsFormTitle = document.getElementById('creds-form-title')
 const credsError = document.getElementById('creds-error')
 const credSelect = document.getElementById('cred-select')
 const inlineCredFields = document.getElementById('inline-cred-fields')
+const bookmarkList = document.getElementById('bookmark-list')
+const bookmarkModal = document.getElementById('bookmark-modal')
+const bookmarkForm = document.getElementById('bookmark-form')
+const bookmarkModalTitle = document.getElementById('bookmark-modal-title')
+const bookmarkError = document.getElementById('bookmark-error')
 
 // ── API helpers ────────────────────────────────────────────────────────────
 function checkAuth(res) {
@@ -268,7 +274,7 @@ function openTerminal(conn) {
     ws.send(JSON.stringify({ type: 'resize', cols, rows }))
   })
 
-  tabs.set(tabId, { term, fitAddon, ws, sessionId: null, label: conn.label })
+  tabs.set(tabId, { kind: 'ssh', term, fitAddon, ws, sessionId: null, label: conn.label })
   addTab(tabId, conn.label)
   switchTab(tabId)
   noConn.style.display = 'none'
@@ -292,18 +298,31 @@ function addTab(tabId, label) {
 
 function switchTab(tabId) {
   if (activeTab) {
-    document.querySelector(`#${activeTab}`)?.classList.remove('active')
+    const prev = tabs.get(activeTab)
+    if (prev?.kind === 'ssh') {
+      document.querySelector(`#${activeTab}`)?.classList.remove('active')
+    } else if (prev?.kind === 'web') {
+      prev.container.style.display = 'none'
+    }
     document.querySelector(`.tab[data-id="${activeTab}"]`)?.classList.remove('active')
   }
   activeTab = tabId
-  document.querySelector(`#${tabId}`)?.classList.add('active')
+  const t = tabs.get(tabId)
+  if (t?.kind === 'ssh') {
+    document.querySelector(`#${tabId}`)?.classList.add('active')
+    t.fitAddon.fit()
+  } else if (t?.kind === 'web') {
+    t.container.style.display = ''
+  }
   document.querySelector(`.tab[data-id="${tabId}"]`)?.classList.add('active')
-  tabs.get(tabId)?.fitAddon.fit()
 }
 
 function closeTab(tabId) {
   const t = tabs.get(tabId)
-  if (t) { t.ws.close(); t.term.dispose() }
+  if (t) {
+    if (t.kind === 'ssh') { t.ws.close(); t.term.dispose() }
+    if (t.kind === 'web') { t.container.remove() }
+  }
   tabs.delete(tabId)
   document.querySelector(`#${tabId}`)?.remove()
   document.querySelector(`.tab[data-id="${tabId}"]`)?.remove()
@@ -313,6 +332,7 @@ function closeTab(tabId) {
     if (remaining.length) switchTab(remaining[remaining.length - 1])
     else noConn.style.display = ''
   }
+  persistOpenTabs()
 }
 
 // ── New/Edit connection modal ───────────────────────────────────────────────
@@ -540,14 +560,194 @@ async function killSession(id) {
   refreshAdmin()
 }
 
+// ── Bookmarks ─────────────────────────────────────────────────────────────
+async function loadBookmarks() {
+  bookmarks = await api.get('/api/bookmarks')
+  renderBookmarkList()
+}
+
+function renderBookmarkList() {
+  bookmarkList.innerHTML = ''
+  for (const bm of bookmarks) {
+    const li = document.createElement('li')
+    li.dataset.id = bm.id
+
+    const info = document.createElement('div')
+    info.className = 'conn-info'
+    const label = document.createElement('span')
+    label.textContent = bm.label
+    const host = document.createElement('span')
+    host.className = 'conn-host'
+    try { host.textContent = new URL(bm.url).host } catch { host.textContent = bm.url }
+    info.appendChild(label)
+    info.appendChild(host)
+
+    const editBtn = document.createElement('button')
+    editBtn.className = 'conn-edit'
+    editBtn.title = 'Edit bookmark'
+    editBtn.textContent = '\u270E'
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation()
+      openBookmarkModal(bm)
+    })
+
+    const deleteBtn = document.createElement('button')
+    deleteBtn.className = 'conn-delete'
+    deleteBtn.title = 'Delete bookmark'
+    deleteBtn.textContent = '\u2715'
+    deleteBtn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      if (!confirm(`Delete "${bm.label}"?`)) return
+      await api.del(`/api/bookmarks/${bm.id}`)
+      await loadBookmarks()
+    })
+
+    li.appendChild(info)
+    li.appendChild(editBtn)
+    li.appendChild(deleteBtn)
+    li.addEventListener('click', () => openWebTab({ url: bm.url, label: bm.label }))
+    bookmarkList.appendChild(li)
+  }
+}
+
+// Bookmark modal
+document.getElementById('add-bookmark').addEventListener('click', () => openBookmarkModal(null))
+document.getElementById('bookmark-cancel').addEventListener('click', closeBookmarkModal)
+bookmarkModal.addEventListener('click', (e) => { if (e.target === bookmarkModal) closeBookmarkModal() })
+
+function openBookmarkModal(bm) {
+  bookmarkForm.reset()
+  bookmarkError.classList.add('hidden')
+  if (bm) {
+    bookmarkModalTitle.textContent = 'Edit Bookmark'
+    bookmarkForm.elements.id.value = bm.id
+    bookmarkForm.elements.label.value = bm.label
+    bookmarkForm.elements.url.value = bm.url
+    bookmarkForm.elements.ignoreTls.checked = bm.ignoreTls
+    document.getElementById('bookmark-submit').textContent = 'Save'
+  } else {
+    bookmarkModalTitle.textContent = 'Add Bookmark'
+    bookmarkForm.elements.id.value = ''
+    document.getElementById('bookmark-submit').textContent = 'Add'
+  }
+  bookmarkModal.classList.remove('hidden')
+  bookmarkForm.elements.label.focus()
+}
+
+function closeBookmarkModal() {
+  bookmarkModal.classList.add('hidden')
+}
+
+bookmarkForm.addEventListener('submit', async (e) => {
+  e.preventDefault()
+  bookmarkError.classList.add('hidden')
+  const data = {
+    label: bookmarkForm.elements.label.value,
+    url: bookmarkForm.elements.url.value,
+    ignoreTls: bookmarkForm.elements.ignoreTls.checked,
+  }
+  const editId = bookmarkForm.elements.id.value
+  try {
+    if (editId) {
+      await api.put(`/api/bookmarks/${editId}`, data)
+    } else {
+      await api.post('/api/bookmarks', data)
+    }
+    closeBookmarkModal()
+    await loadBookmarks()
+  } catch (err) {
+    bookmarkError.textContent = err.message || 'Failed to save bookmark'
+    bookmarkError.classList.remove('hidden')
+  }
+})
+
+// ── Web tabs ──────────────────────────────────────────────────────────────
+function openWebTab({ url, label = null }) {
+  const tabId = `web-${crypto.randomUUID()}`
+  const container = document.createElement('div')
+  container.className = 'web-tab'
+  container.innerHTML = `
+    <div class="web-chrome">
+      <button data-act="back" title="Back">\u2190</button>
+      <button data-act="forward" title="Forward">\u2192</button>
+      <button data-act="reload" title="Reload">\u27F3</button>
+      <form class="web-url-form"><input class="web-url" type="text" value="${url}" spellcheck="false"></form>
+    </div>
+    <iframe class="web-frame" src="/proxy/${url}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+  `
+  termContainer.appendChild(container)
+  container.style.display = 'none'
+
+  const iframe = container.querySelector('iframe')
+  const urlInput = container.querySelector('.web-url')
+  const form = container.querySelector('.web-url-form')
+
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault()
+    const v = urlInput.value.trim()
+    if (v) iframe.src = '/proxy/' + v
+  })
+  container.querySelector('[data-act="back"]').onclick = () => { try { iframe.contentWindow.history.back() } catch {} }
+  container.querySelector('[data-act="forward"]').onclick = () => { try { iframe.contentWindow.history.forward() } catch {} }
+  container.querySelector('[data-act="reload"]').onclick = () => { try { iframe.contentWindow.location.reload() } catch {} }
+
+  iframe.addEventListener('load', () => {
+    try {
+      const path = iframe.contentWindow.location.pathname + iframe.contentWindow.location.search
+      const m = path.match(/^\/proxy\/(.+)$/)
+      if (m) urlInput.value = decodeURIComponent(m[1])
+    } catch { /* cross-origin */ }
+    persistOpenTabs()
+  })
+
+  const tabLabel = label || (() => { try { return new URL(url).host } catch { return url } })()
+  tabs.set(tabId, { kind: 'web', container, iframe, urlInput, label: tabLabel })
+  addTab(tabId, tabLabel)
+  switchTab(tabId)
+  noConn.style.display = 'none'
+  persistOpenTabs()
+}
+
+async function persistOpenTabs() {
+  const state = [...tabs.entries()]
+    .filter(([, t]) => t.kind === 'web')
+    .map(([tabId, t]) => ({ tabId, url: t.urlInput.value }))
+  try { await api.put('/api/tabs', state) } catch {}
+}
+
+async function restoreWebTabs() {
+  try {
+    const saved = await api.get('/api/tabs')
+    for (const t of saved) openWebTab({ url: t.url })
+  } catch {}
+}
+
+// ── Admin web panel ───────────────────────────────────────────────────────
+document.getElementById('admin-web-clear').addEventListener('click', async () => {
+  await api.post('/api/admin/web/clear-cookies', {})
+  refreshAdminWeb()
+})
+
+async function refreshAdminWeb() {
+  try {
+    const data = await api.get('/api/admin/web')
+    document.getElementById('admin-web-cookies').textContent = data.activeCookieSessions
+    document.getElementById('admin-web-tabs').textContent = data.openTabs
+  } catch {}
+}
+
 // ── Resize ────────────────────────────────────────────────────────────────
 const ro = new ResizeObserver(() => {
-  if (activeTab) tabs.get(activeTab)?.fitAddon.fit()
+  const t = activeTab && tabs.get(activeTab)
+  if (t?.kind === 'ssh') t.fitAddon.fit()
 })
 ro.observe(termContainer)
 
 // ── Init ──────────────────────────────────────────────────────────────────
 loadConnections()
 loadCredentials()
+loadBookmarks().then(() => restoreWebTabs())
 refreshAdmin()
+refreshAdminWeb()
 setInterval(refreshAdmin, 15_000)
+setInterval(refreshAdminWeb, 15_000)
