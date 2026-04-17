@@ -14,7 +14,7 @@ import { ConnectionStore } from './store.js'
 import { CredentialStore } from './credentials.js'
 import { BookmarkStore } from './bookmarks.js'
 import { createWebProxy } from './webproxy.js'
-import { CookieJarStore } from './cookiejars.js'
+// CookieJarStore removed — unblocker handles cookies natively via path-scoped browser cookies
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 import { SessionManager, getSessionToken } from './session.js'
@@ -33,11 +33,9 @@ export const sshManager = new SshManager(logger)
 export const sessions = new SessionManager(config.sessionTimeoutMinutes)
 
 // Web proxy state
-const cookieJars = new CookieJarStore()
 const tlsOverrides = new Set()
 const openTabs = new Map() // token -> [{ tabId, url }]
 sessions.onClear((token) => {
-  cookieJars.clearSession(token)
   for (const key of tlsOverrides) if (key.startsWith(`${token}|`)) tlsOverrides.delete(key)
   openTabs.delete(token)
 })
@@ -480,14 +478,13 @@ app.put('/api/tabs', (req, res) => {
 // Admin — web proxy state
 app.get('/api/admin/web', (_req, res) => {
   res.json({
-    activeCookieSessions: cookieJars.sessionCount(),
     openTabs: [...openTabs.values()].reduce((n, arr) => n + arr.length, 0),
     tlsOverrides: tlsOverrides.size,
   })
 })
 
 app.post('/api/admin/web/clear-cookies', (_req, res) => {
-  cookieJars.clearAll()
+  // Cookies are now browser-managed (path-scoped by unblocker) — nothing to clear server-side
   res.json({ ok: true })
 })
 
@@ -502,20 +499,7 @@ app.delete('/api/sessions/:id', (req, res) => {
 })
 
 // Web proxy (must be before SPA fallback)
-app.use(createWebProxy({
-  cookieJars,
-  bookmarks: {
-    getByOrigin(origin) {
-      const s = getBookmarkStore()
-      if (!s) return null
-      return s.list().find(b => {
-        try { return new URL(b.url).origin === origin }
-        catch { return false }
-      }) ?? null
-    },
-  },
-  tlsOverrides,
-}))
+app.use(createWebProxy())
 
 // Serve built frontend (production)
 if (existsSync(DIST)) {

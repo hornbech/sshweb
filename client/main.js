@@ -673,7 +673,7 @@ function openWebTab({ url, label = null }) {
       <button data-act="reload" title="Reload">\u27F3</button>
       <form class="web-url-form"><input class="web-url" type="text" value="${url}" spellcheck="false"></form>
     </div>
-    <iframe class="web-frame" src="/proxy/${url}" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+    <iframe class="web-frame" src="/proxy/${url}"></iframe>
   `
   termContainer.appendChild(container)
   container.style.display = 'none'
@@ -723,15 +723,9 @@ async function restoreWebTabs() {
 }
 
 // ── Admin web panel ───────────────────────────────────────────────────────
-document.getElementById('admin-web-clear').addEventListener('click', async () => {
-  await api.post('/api/admin/web/clear-cookies', {})
-  refreshAdminWeb()
-})
-
 async function refreshAdminWeb() {
   try {
     const data = await api.get('/api/admin/web')
-    document.getElementById('admin-web-cookies').textContent = data.activeCookieSessions
     document.getElementById('admin-web-tabs').textContent = data.openTabs
   } catch {}
 }

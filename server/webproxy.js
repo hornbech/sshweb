@@ -2,21 +2,18 @@ import https from 'node:https'
 import Unblocker from 'unblocker'
 import { classifyHost } from './netguard.js'
 
-const FRAME_HEADERS_TO_STRIP = ['x-frame-options']
-const CSP_DIRECTIVES_TO_STRIP = ['frame-ancestors']
+// Headers stripped from upstream responses so proxied pages render in our iframe.
+// We remove the entire CSP rather than selectively stripping directives because
+// upstream policies are designed for direct access — directives like script-src
+// 'self' or base-uri 'self' break under URL-rewriting proxy context.
+const HEADERS_TO_STRIP = [
+  'x-frame-options',
+  'content-security-policy',
+  'content-security-policy-report-only',
+]
 
 function stripFrameBlocking(data) {
-  for (const h of FRAME_HEADERS_TO_STRIP) delete data.headers[h]
-  for (const h of ['content-security-policy', 'content-security-policy-report-only']) {
-    if (data.headers[h]) {
-      data.headers[h] = data.headers[h]
-        .split(';')
-        .map(d => d.trim())
-        .filter(d => !CSP_DIRECTIVES_TO_STRIP.some(s => d.toLowerCase().startsWith(s)))
-        .join('; ')
-      if (!data.headers[h]) delete data.headers[h]
-    }
-  }
+  for (const h of HEADERS_TO_STRIP) delete data.headers[h]
 }
 
 const ERROR_STYLE = `body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;color:#eee;background:#1a1a1a}
@@ -31,7 +28,7 @@ function errorPage(res, status, title, message) {
 <body><h1>${title}</h1><p>${message}</p></body></html>`)
 }
 
-export function createWebProxy({ cookieJars, bookmarks, tlsOverrides = new Set() }) {
+export function createWebProxy() {
   // Always accept self-signed / expired certs for proxy requests.
   // The private-IP guard is our trust boundary — homelab gear almost
   // universally uses self-signed certs and strict TLS just adds friction.
@@ -40,37 +37,14 @@ export function createWebProxy({ cookieJars, bookmarks, tlsOverrides = new Set()
   const unblocker = new Unblocker({
     prefix: '/proxy/',
     httpsAgent: agent,
-    requestMiddleware: [
-      // Inject per-session cookies for the target origin
-      (data) => {
-        const sessionId = data.clientRequest.sshwebSessionId
-        if (!sessionId) return
-        const origin = `${data.uri.protocol}//${data.uri.host}`
-        const jar = cookieJars.getJar(sessionId, origin)
-        const cookie = jar.getCookieStringSync(data.url)
-        if (cookie) data.headers.cookie = cookie
-      },
-    ],
     responseMiddleware: [
       // Strip frame-blocking headers so the page loads in our iframe
       (data) => stripFrameBlocking(data),
-      // Capture Set-Cookie into per-session jar, then remove from response.
-      // Read from remoteResponse (raw upstream headers) because unblocker's
-      // built-in cookie middleware rewrites paths before we run.
-      (data) => {
-        const raw = data.remoteResponse?.headers?.['set-cookie']
-        if (!raw) return
-        const cookies = Array.isArray(raw) ? raw : [raw]
-        const sessionId = data.clientRequest.sshwebSessionId
-        if (!sessionId) return
-        const origin = `${data.uri.protocol}//${data.uri.host}`
-        const jar = cookieJars.getJar(sessionId, origin)
-        for (const c of cookies) {
-          try { jar.setCookieSync(c, origin) } catch { /* ignore malformed */ }
-        }
-        // Remove rewritten cookies from response — we manage cookies server-side
-        delete data.headers['set-cookie']
-      },
+      // Cookies are handled by unblocker's built-in cookie middleware, which
+      // rewrites Set-Cookie paths to /proxy/http://host:port/ so they're
+      // naturally scoped per target site in the browser.  This allows
+      // upstream JavaScript (e.g. Synology DSM) to read document.cookie for
+      // session tokens and CSRF tokens.
     ],
   })
 
