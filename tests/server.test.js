@@ -110,6 +110,29 @@ test('bookmark routes: rejects missing fields', async () => {
   assert.equal(res.status, 400)
 })
 
+test('proxy: rejects unauthenticated requests', async () => {
+  const res = await request(app).get('/proxy/http://192.168.1.1/')
+  // Should redirect to /unlock (no session cookie)
+  assert.equal(res.status, 302)
+})
+
+test('proxy: private-IP allowed through auth', async () => {
+  // With valid session, the proxy should try to reach the target.
+  // 127.0.0.1:1 is private but nothing is listening — expect a proxy error, not 401/302.
+  const res = await request(app)
+    .get('/proxy/http://127.0.0.1:1/')
+    .set('Cookie', sessionCookie)
+  assert.notEqual(res.status, 401)
+  assert.notEqual(res.status, 302)
+})
+
+test('proxy: public IP blocked with 403', async () => {
+  const res = await request(app)
+    .get('/proxy/http://8.8.8.8/')
+    .set('Cookie', sessionCookie)
+  assert.equal(res.status, 403)
+})
+
 test('after all: close server', () => {
   cleanup?.()
 })

@@ -13,6 +13,8 @@ import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
 import { CredentialStore } from './credentials.js'
 import { BookmarkStore } from './bookmarks.js'
+import { createWebProxy } from './webproxy.js'
+import { CookieJarStore } from './cookiejars.js'
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 import { SessionManager, getSessionToken } from './session.js'
@@ -29,6 +31,16 @@ export const logger = pino({
 export const masterKey = new MasterKey(config.dataDir)
 export const sshManager = new SshManager(logger)
 export const sessions = new SessionManager(config.sessionTimeoutMinutes)
+
+// Web proxy state
+const cookieJars = new CookieJarStore()
+const tlsOverrides = new Set()
+const openTabs = new Map() // token -> [{ tabId, url }]
+sessions.onClear((token) => {
+  cookieJars.clearSession(token)
+  for (const key of tlsOverrides) if (key.startsWith(`${token}|`)) tlsOverrides.delete(key)
+  openTabs.delete(token)
+})
 
 /** @type {ConnectionStore|null} */
 let store = null
@@ -162,7 +174,10 @@ const PUBLIC_PATHS = ['/unlock', '/api/unlock', '/health']
 app.use((req, res, next) => {
   if (PUBLIC_PATHS.some(p => req.path.startsWith(p))) return next()
   if (req.path.startsWith('/assets') || req.path.startsWith('/favicon') || req.path === '/logo.svg') return next()
-  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) return next()
+  if (masterKey.isUnlocked() && sessions.validate(getSessionToken(req))) {
+    req.sshwebSessionId = getSessionToken(req)
+    return next()
+  }
   if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Unauthorized' })
   res.clearCookie('session', { path: '/' })
   return res.redirect('/unlock')
@@ -448,6 +463,22 @@ app.delete('/api/sessions/:id', (req, res) => {
   sshManager.kill(req.params.id)
   res.json({ ok: true })
 })
+
+// Web proxy (must be before SPA fallback)
+app.use(createWebProxy({
+  cookieJars,
+  bookmarks: {
+    getByOrigin(origin) {
+      const s = getBookmarkStore()
+      if (!s) return null
+      return s.list().find(b => {
+        try { return new URL(b.url).origin === origin }
+        catch { return false }
+      }) ?? null
+    },
+  },
+  tlsOverrides,
+}))
 
 // Serve built frontend (production)
 if (existsSync(DIST)) {

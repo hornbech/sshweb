@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 export class SessionManager {
   #sessions = new Map() // token → expiresAt (ms)
   #timeoutMs
+  #clearHandlers = new Set()
 
   constructor(timeoutMinutes) {
     this.#timeoutMs = timeoutMinutes * 60 * 1000
@@ -29,12 +30,17 @@ export class SessionManager {
     return true
   }
 
+  onClear(handler) { this.#clearHandlers.add(handler) }
+
   destroy(token) {
     this.#sessions.delete(token)
+    for (const h of this.#clearHandlers) h(token)
   }
 
   clear() {
+    const tokens = [...this.#sessions.keys()]
     this.#sessions.clear()
+    for (const t of tokens) for (const h of this.#clearHandlers) h(t)
   }
 
   get count() {
