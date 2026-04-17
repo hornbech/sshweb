@@ -87,6 +87,39 @@ Accepted subnet sizes: `/22` to `/30` (up to 1022 hosts). Scans are rate-limited
 
 ---
 
+## Web Browser Tab
+
+Browse internal admin UIs (Pi-hole, Portainer, router pages, NAS dashboards) directly inside sshweb without opening a separate browser tab.
+
+### How it works
+
+A built-in HTTP proxy (`/proxy/<url>`) fetches upstream pages and rewrites URLs so links, images, and stylesheets route back through the proxy. Pages render inside an iframe with a URL bar and back/forward/reload controls.
+
+### Adding bookmarks
+
+Click the **+** button in the Web sidebar section. Enter a label and the full URL (e.g. `http://192.168.1.5/admin`). Bookmarks are saved in SQLite and appear in the sidebar — click one to open a web tab.
+
+### Scope and limitations
+
+- **Private IPs only** — the proxy enforces RFC 1918, loopback, and link-local addresses. Public IPs and hostnames that resolve to public addresses are blocked (403). DNS is resolved and pinned per request to prevent rebinding attacks.
+- **HTML/CSS admin UIs** — URL rewriting covers HTML links, CSS `url()`, and standard redirects. JavaScript-computed URLs (single-page apps with client-side routing) may not rewrite correctly.
+- **No WebSocket proxying** — upstream WebSocket connections are rejected (501). Most admin UIs don't need them.
+- **No file downloads through the iframe** — use a direct browser tab for large file downloads.
+- **Cookies are per-session** — each sshweb login session gets isolated cookie jars per upstream origin. Cookies are wiped when you lock sshweb or your session expires. Logging into an upstream admin UI only persists for the current sshweb session.
+
+### TLS / self-signed certificates
+
+- **Bookmarks**: toggle "Ignore TLS errors" when creating or editing a bookmark.
+- **Ad-hoc URLs**: if the upstream has an invalid or self-signed certificate, sshweb shows an interstitial page. Click "Proceed for this session" to accept the cert for the remainder of your session.
+
+### Troubleshooting
+
+- **Page doesn't load in the iframe** — some servers send `X-Frame-Options: DENY` or restrictive `Content-Security-Policy frame-ancestors`. The proxy strips these headers automatically, but custom server configurations may still block embedding.
+- **Login doesn't persist across reloads** — cookies are managed server-side in memory. They survive page reloads within the same session but are cleared on lock/unlock.
+- **Links go to the wrong place** — JavaScript-heavy single-page apps may compute URLs that bypass the proxy's HTML/CSS rewriter. Static admin pages (Pi-hole, most router UIs) work well.
+
+---
+
 ## Nginx Proxy Manager Setup
 
 1. Add a **Proxy Host** pointing to `http://<host-ip>:3000`
@@ -274,6 +307,10 @@ sshweb/
 │   ├── crypto.js       # AES-256-GCM encrypt/decrypt
 │   ├── masterkey.js    # Argon2id key derivation + lock/unlock
 │   ├── store.js        # Encrypted SQLite connection store
+│   ├── bookmarks.js    # SQLite bookmark store for web tabs
+│   ├── cookiejars.js   # Per-session cookie jar isolation
+│   ├── netguard.js     # Private-IP guard with DNS classification
+│   ├── webproxy.js     # Unblocker-backed HTTP proxy pipeline
 │   ├── ssh.js          # SSH session manager (ssh2)
 │   └── index.js        # Express server + WebSocket handler
 ├── client/
