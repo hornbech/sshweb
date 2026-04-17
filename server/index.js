@@ -110,8 +110,12 @@ function requireStore(res) {
 
 export const app = express()
 app.set('trust proxy', 1) // real client IP from X-Forwarded-For (NPM)
+app.disable('x-powered-by')
 
-app.use(helmet({
+// Skip security headers for proxied content — upstream pages need their own
+// CSP / CORS / etc. and helmet's strict defaults would block inline scripts,
+// eval(), and other things that upstream admin UIs rely on.
+const helmetMiddleware = helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -134,7 +138,11 @@ app.use(helmet({
       geolocation: [],
     },
   },
-}))
+})
+app.use((req, res, next) => {
+  if (req.path.startsWith('/proxy/')) return next()
+  return helmetMiddleware(req, res, next)
+})
 
 // Rate limit unlock attempts (per real IP)
 const unlockLimiter = rateLimit({
