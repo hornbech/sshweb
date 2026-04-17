@@ -14,22 +14,21 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Web browser tab** — browse internal admin UIs (Pi-hole, Portainer, router pages) via a built-in HTTP proxy. Bookmarks live in the sidebar alongside SSH connections; click to open a web tab with URL bar, back/forward/reload chrome, rendered in an iframe. Tabs restore on page reload. Per-session cookie isolation prevents upstream auth from leaking between sessions.
 - `server/bookmarks.js` — `BookmarkStore` SQLite CRUD for web bookmarks (label, URL, ignoreTls flag).
 - `server/netguard.js` — `isPrivateAddress()` and `classifyHost()` enforce RFC 1918 + loopback scope with DNS pinning against rebinding.
-- `server/cookiejars.js` — `CookieJarStore` provides per-session, per-origin cookie jars using `tough-cookie`.
-- `server/webproxy.js` — `createWebProxy()` wraps `unblocker` with private-IP guard, cookie injection/capture, frame-header stripping, and permissive TLS for homelab gear.
+- `server/cookiejars.js` — `CookieJarStore` (retained for potential future use).
+- `server/webproxy.js` — `createWebProxy()` wraps `unblocker` with private-IP guard, frame-header stripping, and permissive TLS for homelab gear.
 - `GET/POST /api/bookmarks`, `GET/PUT/DELETE /api/bookmarks/:id` — bookmark CRUD endpoints.
 - `POST /api/tls-override` — session-scoped TLS certificate override ("proceed anyway" for self-signed certs).
 - `GET/PUT /api/tabs` — persist/restore open web tab URLs per session.
-- `GET /api/admin/web` — web proxy metrics (active cookie sessions, open tabs, TLS overrides).
-- `POST /api/admin/web/clear-cookies` — wipe all proxy cookie jars.
+- `GET /api/admin/web` — web proxy metrics (open tabs, TLS overrides).
 - Friendly error pages for proxy connection failures (ECONNREFUSED, timeout, DNS errors) instead of raw Express stack traces.
-- Admin panel shows web proxy metrics and clear-cookies button.
+- Admin panel shows web proxy metrics.
 
 ### Security
 
 - Proxy rejects any target that isn't RFC 1918 or loopback (DNS pinned per request against rebinding). TLS certificate verification is disabled for proxy requests — the private-IP guard is the trust boundary; homelab gear almost universally uses self-signed certs.
-- `X-Frame-Options` and `frame-ancestors` CSP directives stripped from upstream responses to allow iframe embedding; sshweb's own CSP restricts `frame-src` to `'self'`.
-- Upstream `Set-Cookie` headers captured server-side and removed from browser responses — cookies never reach the browser's jar.
-- All proxy state (cookie jars, TLS overrides, open tabs) wiped on session destroy/lock via `SessionManager.onClear` hook.
+- Entire upstream `Content-Security-Policy`, `X-Frame-Options`, and related headers stripped from proxied responses. Sshweb's own helmet CSP is skipped for `/proxy/` routes so upstream JavaScript (eval, inline scripts) can execute. Non-proxy routes retain the full helmet CSP.
+- Upstream cookies handled by unblocker's built-in cookie middleware — paths are rewritten to `/proxy/http://host:port/` so cookies are naturally scoped per target site in the browser. This allows JavaScript-heavy SPAs (e.g. Synology DSM) to read `document.cookie` for CSRF tokens and session management.
+- Proxy state (TLS overrides, open tabs) wiped on session destroy/lock via `SessionManager.onClear` hook.
 
 ### Added
 
@@ -59,6 +58,11 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Version disclosure removed** — `GET /health` no longer returns the application version.
 
 ### Fixed
+
+- **Web proxy broke JavaScript-heavy SPAs (e.g. Synology DSM)** — three issues combined to prevent complex admin UIs from loading through the proxy:
+  1. Sshweb's own helmet CSP (`script-src 'self'`, no `unsafe-eval`) was applied to proxied responses, blocking unblocker's injected inline `<script>unblockerInit()</script>` and any upstream `eval()` usage. Fixed by skipping helmet for `/proxy/` routes.
+  2. Server-side cookie capture deleted `Set-Cookie` headers from responses, preventing upstream JavaScript from reading `document.cookie` for CSRF tokens (e.g. Synology's SynoToken). Fixed by letting unblocker's built-in cookie middleware handle cookies natively — paths are rewritten and scoped per target site.
+  3. Iframe `sandbox` attribute was too restrictive (missing `allow-modals`, blocked top navigation). Removed entirely since the proxy already restricts to private IPs.
 
 - **SSH sessions disconnecting when idle** — the ssh2 client now sends SSH-level keepalive packets every 15 seconds (configurable via `SSH_KEEPALIVE_INTERVAL`), preventing the remote server or NAT/firewall from dropping idle connections. The WebSocket server also pings all clients every 30 seconds so reverse proxies (e.g. Nginx Proxy Manager) do not close idle WebSocket connections.
 

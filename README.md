@@ -102,10 +102,10 @@ Click the **+** button in the Web sidebar section. Enter a label and the full UR
 ### Scope and limitations
 
 - **Private IPs only** — the proxy enforces RFC 1918, loopback, and link-local addresses. Public IPs and hostnames that resolve to public addresses are blocked (403). DNS is resolved and pinned per request to prevent rebinding attacks.
-- **HTML/CSS admin UIs** — URL rewriting covers HTML links, CSS `url()`, and standard redirects. JavaScript-computed URLs (single-page apps with client-side routing) may not rewrite correctly.
+- **HTML/CSS admin UIs** — URL rewriting covers HTML links, CSS `url()`, and standard redirects. An injected client script intercepts `XMLHttpRequest`, `fetch`, and `createElement` to rewrite dynamically constructed URLs. JavaScript-heavy SPAs (e.g. Synology DSM) generally work, though deeply dynamic single-page apps with client-side routing may have edge cases.
 - **No WebSocket proxying** — upstream WebSocket connections are rejected (501). Most admin UIs don't need them.
 - **No file downloads through the iframe** — use a direct browser tab for large file downloads.
-- **Cookies are per-session** — each sshweb login session gets isolated cookie jars per upstream origin. Cookies are wiped when you lock sshweb or your session expires. Logging into an upstream admin UI only persists for the current sshweb session.
+- **Cookies are browser-managed** — unblocker rewrites upstream `Set-Cookie` paths to `/proxy/http://host:port/`, naturally scoping cookies per target site. Upstream JavaScript can read `document.cookie` for session tokens and CSRF tokens. Cookies persist in the browser for the duration of the sshweb browser session.
 
 ### TLS / self-signed certificates
 
@@ -113,9 +113,9 @@ The proxy accepts self-signed and expired certificates automatically. Since all 
 
 ### Troubleshooting
 
-- **Page doesn't load in the iframe** — some servers send `X-Frame-Options: DENY` or restrictive `Content-Security-Policy frame-ancestors`. The proxy strips these headers automatically, but custom server configurations may still block embedding.
-- **Login doesn't persist across reloads** — cookies are managed server-side in memory. They survive page reloads within the same session but are cleared on lock/unlock.
-- **Links go to the wrong place** — JavaScript-heavy single-page apps may compute URLs that bypass the proxy's HTML/CSS rewriter. Static admin pages (Pi-hole, most router UIs) work well.
+- **Page doesn't load in the iframe** — some servers send `X-Frame-Options: DENY` or restrictive `Content-Security-Policy frame-ancestors`. The proxy strips these headers (and the entire upstream CSP) automatically.
+- **Login doesn't persist across reloads** — cookies are stored in the browser scoped to `/proxy/http://host:port/`. They persist across page reloads but are cleared when you close the browser or clear cookies.
+- **Links go to the wrong place** — some deeply dynamic single-page apps may compute URLs that bypass the proxy's rewriter. Most admin UIs (Pi-hole, Synology DSM, router pages) work well.
 
 ---
 
@@ -249,7 +249,7 @@ What is stored on disk:
 
 ### HTTP Security Headers
 
-Every response includes:
+Every non-proxy response includes:
 
 | Header | Value |
 |--------|-------|
@@ -260,7 +260,7 @@ Every response includes:
 | `Referrer-Policy` | `no-referrer` |
 | `Permissions-Policy` | Disables camera, microphone, geolocation |
 
-`X-Powered-By` is suppressed.
+`X-Powered-By` is suppressed. Proxied responses (`/proxy/*`) skip helmet entirely — upstream pages need `eval()`, inline scripts, and other features that the strict CSP would block. The private-IP guard is the trust boundary for proxied content.
 
 ### Session Authentication
 
