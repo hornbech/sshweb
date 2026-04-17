@@ -144,6 +144,24 @@ test('tabs endpoint round-trips open-tab state', async () => {
   assert.equal(again.body[0].tabId, 'a')
 })
 
+test('admin web-state endpoint', async () => {
+  const before = await request(app)
+    .get('/api/admin/web')
+    .set('Cookie', sessionCookie)
+  assert.equal(before.status, 200)
+  assert.equal(typeof before.body.activeCookieSessions, 'number')
+
+  const clear = await request(app)
+    .post('/api/admin/web/clear-cookies')
+    .set('Cookie', sessionCookie)
+  assert.equal(clear.status, 200)
+
+  const after = await request(app)
+    .get('/api/admin/web')
+    .set('Cookie', sessionCookie)
+  assert.equal(after.body.activeCookieSessions, 0)
+})
+
 test('proxy: rejects unauthenticated requests', async () => {
   const res = await request(app).get('/proxy/http://192.168.1.1/')
   // Should redirect to /unlock (no session cookie)

@@ -476,6 +476,20 @@ app.put('/api/tabs', (req, res) => {
   res.json({ ok: true })
 })
 
+// Admin — web proxy state
+app.get('/api/admin/web', (_req, res) => {
+  res.json({
+    activeCookieSessions: cookieJars.sessionCount(),
+    openTabs: [...openTabs.values()].reduce((n, arr) => n + arr.length, 0),
+    tlsOverrides: tlsOverrides.size,
+  })
+})
+
+app.post('/api/admin/web/clear-cookies', (_req, res) => {
+  cookieJars.clearAll()
+  res.json({ ok: true })
+})
+
 // Active sessions (admin)
 app.get('/api/sessions', (req, res) => {
   res.json(sshManager.listSessions())
