@@ -109,8 +109,7 @@ Click the **+** button in the Web sidebar section. Enter a label and the full UR
 
 ### TLS / self-signed certificates
 
-- **Bookmarks**: toggle "Ignore TLS errors" when creating or editing a bookmark.
-- **Ad-hoc URLs**: if the upstream has an invalid or self-signed certificate, sshweb shows an interstitial page. Click "Proceed for this session" to accept the cert for the remainder of your session.
+The proxy accepts self-signed and expired certificates automatically. Since all targets are restricted to private IPs, the network boundary is the trust model — not TLS certificate validation. This means HTTPS admin UIs on homelab gear (routers, NAS, Proxmox, etc.) work out of the box without any certificate configuration.
 
 ### Troubleshooting
 

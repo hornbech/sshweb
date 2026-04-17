@@ -15,18 +15,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - `server/bookmarks.js` — `BookmarkStore` SQLite CRUD for web bookmarks (label, URL, ignoreTls flag).
 - `server/netguard.js` — `isPrivateAddress()` and `classifyHost()` enforce RFC 1918 + loopback scope with DNS pinning against rebinding.
 - `server/cookiejars.js` — `CookieJarStore` provides per-session, per-origin cookie jars using `tough-cookie`.
-- `server/webproxy.js` — `createWebProxy()` wraps `unblocker` with private-IP guard, cookie injection/capture, frame-header stripping, and TLS override support.
+- `server/webproxy.js` — `createWebProxy()` wraps `unblocker` with private-IP guard, cookie injection/capture, frame-header stripping, and permissive TLS for homelab gear.
 - `GET/POST /api/bookmarks`, `GET/PUT/DELETE /api/bookmarks/:id` — bookmark CRUD endpoints.
 - `POST /api/tls-override` — session-scoped TLS certificate override ("proceed anyway" for self-signed certs).
 - `GET/PUT /api/tabs` — persist/restore open web tab URLs per session.
 - `GET /api/admin/web` — web proxy metrics (active cookie sessions, open tabs, TLS overrides).
 - `POST /api/admin/web/clear-cookies` — wipe all proxy cookie jars.
-- TLS interstitial page for self-signed certificate errors with one-click session-scoped override.
+- Friendly error pages for proxy connection failures (ECONNREFUSED, timeout, DNS errors) instead of raw Express stack traces.
 - Admin panel shows web proxy metrics and clear-cookies button.
 
 ### Security
 
-- Proxy rejects any target that isn't RFC 1918 or loopback (DNS pinned per request against rebinding). TLS strict by default; per-bookmark and session-scoped overrides required to accept self-signed certs.
+- Proxy rejects any target that isn't RFC 1918 or loopback (DNS pinned per request against rebinding). TLS certificate verification is disabled for proxy requests — the private-IP guard is the trust boundary; homelab gear almost universally uses self-signed certs.
 - `X-Frame-Options` and `frame-ancestors` CSP directives stripped from upstream responses to allow iframe embedding; sshweb's own CSP restricts `frame-src` to `'self'`.
 - Upstream `Set-Cookie` headers captured server-side and removed from browser responses — cookies never reach the browser's jar.
 - All proxy state (cookie jars, TLS overrides, open tabs) wiped on session destroy/lock via `SessionManager.onClear` hook.
