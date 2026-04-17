@@ -12,6 +12,7 @@ import { config } from './config.js'
 import { MasterKey } from './masterkey.js'
 import { ConnectionStore } from './store.js'
 import { CredentialStore } from './credentials.js'
+import { BookmarkStore } from './bookmarks.js'
 import { SshManager } from './ssh.js'
 import { getLocalSubnets, parseCIDR, scanSubnet } from './scan.js'
 import { SessionManager, getSessionToken } from './session.js'
@@ -55,6 +56,26 @@ function getCredStore() {
   return credStore
 }
 
+/** @type {BookmarkStore|null} */
+let bookmarkStore = null
+
+function getBookmarkStore() {
+  if (!bookmarkStore && masterKey.isUnlocked()) {
+    bookmarkStore = new BookmarkStore(join(config.dataDir, 'bookmarks.db'))
+  }
+  return bookmarkStore
+}
+
+function closeBookmarkStore() {
+  if (bookmarkStore) { bookmarkStore.close(); bookmarkStore = null }
+}
+
+function requireBookmarkStore(res) {
+  const s = getBookmarkStore()
+  if (!s) { res.status(423).json({ error: 'Server locked' }); return null }
+  return s
+}
+
 function closeCredStore() {
   if (credStore) { credStore.close(); credStore = null }
 }
@@ -68,6 +89,7 @@ function requireCredStore(res) {
 function closeStore() {
   if (store) { store.close(); store = null }
   closeCredStore()
+  closeBookmarkStore()
 }
 
 function requireStore(res) {
@@ -379,6 +401,40 @@ app.delete('/api/credentials/:id', (req, res) => {
       })
     }
   }
+  s.delete(req.params.id)
+  res.json({ ok: true })
+})
+
+// Bookmark CRUD
+app.get('/api/bookmarks', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  res.json(s.list())
+})
+
+app.post('/api/bookmarks', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  const { label, url, ignoreTls } = req.body
+  if (!label || !url) return res.status(400).json({ error: 'label and url are required' })
+  try { new URL(url) } catch { return res.status(400).json({ error: 'invalid url' }) }
+  const id = s.create({ label, url, ignoreTls: !!ignoreTls })
+  res.status(201).json({ id })
+})
+
+app.get('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  const bm = s.get(req.params.id)
+  if (!bm) return res.status(404).json({ error: 'Not found' })
+  res.json(bm)
+})
+
+app.put('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
+  try { s.update(req.params.id, req.body); res.json({ ok: true }) }
+  catch (err) { res.status(404).json({ error: err.message }) }
+})
+
+app.delete('/api/bookmarks/:id', (req, res) => {
+  const s = requireBookmarkStore(res); if (!s) return
   s.delete(req.params.id)
   res.json({ ok: true })
 })
