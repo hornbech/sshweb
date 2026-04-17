@@ -124,6 +124,26 @@ test('tls override is session-scoped', async () => {
   assert.equal(bad.status, 400)
 })
 
+test('tabs endpoint round-trips open-tab state', async () => {
+  const empty = await request(app)
+    .get('/api/tabs')
+    .set('Cookie', sessionCookie)
+  assert.equal(empty.status, 200)
+  assert.deepEqual(empty.body, [])
+
+  const put = await request(app)
+    .put('/api/tabs')
+    .set('Cookie', sessionCookie)
+    .send([{ tabId: 'a', url: 'http://192.168.1.5/' }])
+  assert.equal(put.status, 200)
+
+  const again = await request(app)
+    .get('/api/tabs')
+    .set('Cookie', sessionCookie)
+  assert.equal(again.body.length, 1)
+  assert.equal(again.body[0].tabId, 'a')
+})
+
 test('proxy: rejects unauthenticated requests', async () => {
   const res = await request(app).get('/proxy/http://192.168.1.1/')
   // Should redirect to /unlock (no session cookie)

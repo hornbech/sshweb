@@ -463,6 +463,19 @@ app.post('/api/tls-override', (req, res) => {
   res.json({ ok: true })
 })
 
+// Tab restore (per-session open web tabs)
+app.get('/api/tabs', (req, res) => {
+  res.json(openTabs.get(req.sshwebSessionId) ?? [])
+})
+app.put('/api/tabs', (req, res) => {
+  if (!Array.isArray(req.body)) return res.status(400).json({ error: 'array required' })
+  const cleaned = req.body
+    .filter(t => t && typeof t.tabId === 'string' && typeof t.url === 'string')
+    .slice(0, 20) // bound memory
+  openTabs.set(req.sshwebSessionId, cleaned)
+  res.json({ ok: true })
+})
+
 // Active sessions (admin)
 app.get('/api/sessions', (req, res) => {
   res.json(sshManager.listSessions())
