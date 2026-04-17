@@ -30,12 +30,24 @@
         </div>
       </div>
       <ul id="connection-list"></ul>
+      <section id="web-section">
+        <header class="web-header">
+          <h2>Web</h2>
+          <button id="add-bookmark" title="Add bookmark">+</button>
+        </header>
+        <ul id="bookmark-list"></ul>
+      </section>
       <div id="admin-panel">
         <div class="admin-row">
           <span id="status-dot" class="dot green"></span>
           <span id="uptime">—</span>
         </div>
         <div id="active-sessions-list"></div>
+        <div id="admin-web">
+          <div>Cookie sessions: <span id="admin-web-cookies">0</span></div>
+          <div>Open web tabs: <span id="admin-web-tabs">0</span></div>
+          <button id="admin-web-clear" class="secondary">Clear web cookies</button>
+        </div>
         <button id="lock-btn" class="danger">Lock Server</button>
         <button id="change-pw-btn" class="secondary">Change Password</button>
       </div>
@@ -89,6 +101,26 @@
         <div class="modal-actions">
           <button type="button" id="creds-cancel">Cancel</button>
           <button type="submit" id="creds-submit">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Bookmark modal -->
+  <div id="bookmark-modal" class="hidden">
+    <div class="modal-card">
+      <h2 id="bookmark-modal-title">Add Bookmark</h2>
+      <form id="bookmark-form">
+        <input type="hidden" name="id">
+        <input name="label" placeholder="Label (e.g. Pi-hole)" required>
+        <input name="url" type="url" placeholder="http://192.168.1.5/admin" required>
+        <label class="checkbox-label">
+          <input name="ignoreTls" type="checkbox"> Ignore TLS errors
+        </label>
+        <p id="bookmark-error" class="error hidden"></p>
+        <div class="modal-actions">
+          <button type="button" id="bookmark-cancel">Cancel</button>
+          <button type="submit" id="bookmark-submit">Add</button>
         </div>
       </form>
     </div>

@@ -120,6 +120,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"], // xterm.js writes inline styles
       connectSrc: ["'self'", 'wss:', 'ws:'],   // WebSocket
+      frameSrc: ["'self'"],
       imgSrc: ["'self'", 'data:'],
       fontSrc: ["'self'"],
       workerSrc: ["'self'", 'blob:'],           // xterm.js worker
