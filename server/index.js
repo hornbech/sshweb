@@ -454,6 +454,15 @@ app.delete('/api/bookmarks/:id', (req, res) => {
   res.json({ ok: true })
 })
 
+// TLS override (session-scoped "proceed anyway")
+app.post('/api/tls-override', (req, res) => {
+  const { origin } = req.body
+  if (!origin || typeof origin !== 'string') return res.status(400).json({ error: 'origin required' })
+  try { new URL(origin) } catch { return res.status(400).json({ error: 'invalid origin' }) }
+  tlsOverrides.add(`${req.sshwebSessionId}|${origin}`)
+  res.json({ ok: true })
+})
+
 // Active sessions (admin)
 app.get('/api/sessions', (req, res) => {
   res.json(sshManager.listSessions())

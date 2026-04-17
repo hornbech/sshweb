@@ -110,6 +110,20 @@ test('bookmark routes: rejects missing fields', async () => {
   assert.equal(res.status, 400)
 })
 
+test('tls override is session-scoped', async () => {
+  const res = await request(app)
+    .post('/api/tls-override')
+    .set('Cookie', sessionCookie)
+    .send({ origin: 'https://192.168.1.20' })
+  assert.equal(res.status, 200)
+  // Missing origin rejects
+  const bad = await request(app)
+    .post('/api/tls-override')
+    .set('Cookie', sessionCookie)
+    .send({})
+  assert.equal(bad.status, 400)
+})
+
 test('proxy: rejects unauthenticated requests', async () => {
   const res = await request(app).get('/proxy/http://192.168.1.1/')
   // Should redirect to /unlock (no session cookie)
