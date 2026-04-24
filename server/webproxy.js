@@ -1,6 +1,9 @@
 import https from 'node:https'
 import Unblocker from 'unblocker'
 import { classifyHost } from './netguard.js'
+import { PATCHED_CLIENT_JS } from './unblocker-client-patched.js'
+
+const CLIENT_SCRIPT_PATH = '/proxy/client/unblocker-client.js'
 
 // Headers stripped from upstream responses so proxied pages render in our iframe.
 // We remove the entire CSP rather than selectively stripping directives because
@@ -52,6 +55,14 @@ export function createWebProxy() {
   return function webProxyMiddleware(req, res, next) {
     // Only handle /proxy/ requests
     if (!req.url.startsWith('/proxy/')) return next()
+
+    // Serve our patched injected client script.  Upstream unblocker's initFetch
+    // breaks multi-step logins by assigning to Request.url (read-only).
+    if (req.url === CLIENT_SCRIPT_PATH) {
+      res.set('content-type', 'application/javascript; charset=utf-8')
+      res.set('cache-control', 'public, max-age=600')
+      return res.send(PATCHED_CLIENT_JS)
+    }
 
     // Reject WebSocket upgrades
     if ((req.headers.upgrade || '').toLowerCase() === 'websocket') {
