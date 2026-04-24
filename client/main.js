@@ -311,6 +311,7 @@ function switchTab(tabId) {
   if (t?.kind === 'ssh') {
     document.querySelector(`#${tabId}`)?.classList.add('active')
     t.fitAddon.fit()
+    t.term.focus()
   } else if (t?.kind === 'web') {
     t.container.style.display = ''
   }
